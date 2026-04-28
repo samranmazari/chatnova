@@ -17,8 +17,6 @@ document.addEventListener("DOMContentLoaded", function () {
     // Initialize Firebase
     let db = null;
     let storage = null;
-    let auth = null;
-    
     try {
         if (typeof firebase !== 'undefined') {
             if (!firebase.apps.length) {
@@ -26,8 +24,7 @@ document.addEventListener("DOMContentLoaded", function () {
             }
             db = firebase.database();
             storage = firebase.storage();
-            auth = firebase.auth();
-            console.log("ChatNova: Firebase Auth, DB & Storage initialized");
+            console.log("ChatNova: Firebase & Storage initialized");
         }
     } catch (error) {
         console.error("ChatNova: Firebase failed:", error);
@@ -40,10 +37,8 @@ document.addEventListener("DOMContentLoaded", function () {
     let partnerId = null;
     let partnerProfile = null;
     let isSearching = false;
-    let authProvider = null; // 'google' or 'guest'
 
     // DOM Elements
-    const screenAuth = document.getElementById('screen-auth');
     const ageOverlay = document.getElementById('age-overlay');
     const blockedScreen = document.getElementById('blocked-screen');
     const appContainer = document.getElementById('app-container');
@@ -51,9 +46,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const screenSearching = document.getElementById('screen-searching');
     const screenChat = document.getElementById('screen-chat');
     const screenProfile = document.getElementById('screen-profile');
-    
-    const googleSigninBtn = document.getElementById('google-signin-btn');
-    const guestSigninBtn = document.getElementById('guest-signin-btn');
 
     const profileBtn = document.getElementById('profile-btn');
     const profileBack = document.getElementById('profile-back');
@@ -68,136 +60,79 @@ document.addEventListener("DOMContentLoaded", function () {
     const sendBtn = document.getElementById('send-btn');
     const nextBtn = document.getElementById('next-btn');
     const stopBtn = document.getElementById('stop-btn');
-    
+
     const partnerAvatar = document.getElementById('partner-avatar');
     const partnerName = document.getElementById('partner-name');
 
-    // --- NAVIGATION ---
+    // --- UI HELPERS ---
 
     function showScreen(screenId) {
-        const screens = ['screen-auth', 'screen-gender', 'screen-searching', 'screen-chat', 'screen-profile'];
+        const screens = ['screen-gender', 'screen-searching', 'screen-chat', 'screen-profile'];
         screens.forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;
             if (id === screenId) {
                 el.classList.remove('hidden');
-                el.style.display = 'flex';
                 el.classList.add('fade-in');
             } else {
                 el.classList.add('hidden');
-                el.style.display = 'none';
+                el.classList.remove('fade-in');
             }
         });
-    }
-
-    // Initialize with Auth Screen
-    showScreen('screen-auth');
-
-    // --- AUTHENTICATION SYSTEM ---
-
-    googleSigninBtn.addEventListener('click', async () => {
-        const provider = new firebase.auth.GoogleAuthProvider();
-        try {
-            const result = await auth.signInWithPopup(provider);
-            const user = result.user;
-            authProvider = 'google';
-            
-            // Map Firebase UID to numeric ID if needed, but per requirement 
-            // we treat Google users as persistent using their UID or a numeric alias.
-            // For consistency, let's assign them a numeric ID if they don't have one.
-            await handleUserLogin(user, 'google');
-        } catch (error) {
-            console.error("ChatNova: Google Sign-in failed", error);
-            alert("Sign-in failed. Please try again.");
-        }
-    });
-
-    guestSigninBtn.addEventListener('click', () => {
-        authProvider = 'guest';
-        handleUserLogin(null, 'guest');
-    });
-
-    async function handleUserLogin(fbUser, provider) {
-        if (provider === 'google' && fbUser) {
-            // Check if this Google user already has a numeric ID
-            const snapshot = await db.ref('googleMap/' + fbUser.uid).once('value');
-            if (snapshot.exists()) {
-                numericId = snapshot.val().toString();
-                localStorage.setItem('chatnova_numericId', numericId);
-            } else {
-                // Generate new numeric ID for this Google user
-                await generateNewNumericId(async (newId) => {
-                    await db.ref('googleMap/' + fbUser.uid).set(newId);
-                    // Create/Update Profile with Google data
-                    await db.ref('users/' + newId).set({
-                        userId: newId,
-                        displayName: fbUser.displayName || "Google User",
-                        email: fbUser.email,
-                        profileImageURL: fbUser.photoURL || "",
-                        authProvider: 'google',
-                        createdAt: firebase.database.ServerValue.TIMESTAMP
-                    });
-                });
-            }
-        } else if (provider === 'guest') {
-            if (!numericId) {
-                await generateNewNumericId(async (newId) => {
-                    await db.ref('users/' + newId).set({
-                        userId: newId,
-                        displayName: "Guest" + newId,
-                        authProvider: 'guest',
-                        profileImageURL: "",
-                        createdAt: firebase.database.ServerValue.TIMESTAMP
-                    });
-                });
-            }
-        }
-
-        // Proceed to Age Verification
-        showScreen('none'); // Hide Auth
-        ageOverlay.classList.remove('hidden');
-    }
-
-    async function generateNewNumericId(callback) {
-        const result = await db.ref('userCounter').transaction((current) => {
-            return (current || 1000) + 1;
-        });
-        if (result.committed) {
-            const newId = result.snapshot.val().toString();
-            numericId = newId;
-            localStorage.setItem('chatnova_numericId', newId);
-            if (callback) await callback(newId);
-        }
     }
 
     // --- USER PROFILE SYSTEM ---
 
-    async function loadUserProfile() {
-        if (!numericId) return;
-        db.ref('users/' + numericId).on('value', (snapshot) => {
+    async function initUser(gender) {
+        if (numericId) {
+            // Fetch existing profile
+            const snapshot = await db.ref('users/' + numericId).once('value');
             userProfile = snapshot.val();
-            if (userProfile) {
-                displayUserId.innerText = userProfile.userId;
-                profileNameInput.value = userProfile.displayName;
-                if (userProfile.profileImageURL) {
-                    profileImgPreview.src = userProfile.profileImageURL;
-                }
-                // If Google user, disable some edits or show badge?
-                if (userProfile.authProvider === 'google') {
-                    // Optional: mark as verified
-                }
+            loadProfileToUI();
+            return;
+        }
+
+        // Generate New Sequential ID
+        console.log("ChatNova: Generating new sequential ID...");
+        db.ref('userCounter').transaction((current) => {
+            return (current || 1000) + 1;
+        }, async (error, committed, snapshot) => {
+            if (committed) {
+                numericId = snapshot.val().toString();
+                localStorage.setItem('chatnova_numericId', numericId);
+
+                // Create Profile
+                userProfile = {
+                    userId: numericId,
+                    displayName: "User" + numericId,
+                    gender: gender,
+                    profileImageURL: "",
+                    createdAt: firebase.database.ServerValue.TIMESTAMP
+                };
+
+                await db.ref('users/' + numericId).set(userProfile);
+                console.log("ChatNova: Profile created for ID", numericId);
+                loadProfileToUI();
             }
         });
     }
 
-    // --- CORE FLOW ---
+    function loadProfileToUI() {
+        if (!userProfile) return;
+        displayUserId.innerText = userProfile.userId;
+        profileNameInput.value = userProfile.displayName;
+        if (userProfile.profileImageURL) {
+            profileImgPreview.src = userProfile.profileImageURL;
+        }
+    }
 
-    document.getElementById('age-yes').addEventListener('click', async () => {
+    // --- EVENT LISTENERS ---
+
+    document.getElementById('age-yes').addEventListener('click', () => {
         ageOverlay.classList.add('fade-out');
         setTimeout(() => {
             ageOverlay.classList.add('hidden');
             appContainer.classList.remove('hidden');
-            loadUserProfile();
             showScreen('screen-gender');
         }, 500);
     });
@@ -208,11 +143,9 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     document.querySelectorAll('.gender-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             const gender = btn.getAttribute('data-gender');
-            if (userProfile) {
-                db.ref('users/' + numericId).update({ gender: gender });
-            }
+            await initUser(gender);
             document.querySelectorAll('.gender-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             setTimeout(() => startMatching(), 400);
@@ -233,6 +166,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (!numericId) return;
         const newName = profileNameInput.value.trim();
         if (newName) {
+            userProfile.displayName = newName;
             await db.ref('users/' + numericId).update({ displayName: newName });
             alert("Profile updated!");
         }
@@ -250,6 +184,8 @@ document.addEventListener("DOMContentLoaded", function () {
             (error) => console.error("Upload failed:", error),
             async () => {
                 const url = await uploadTask.snapshot.ref.getDownloadURL();
+                userProfile.profileImageURL = url;
+                profileImgPreview.src = url;
                 await db.ref('users/' + numericId).update({ profileImageURL: url });
                 console.log("Avatar updated:", url);
             }
@@ -260,7 +196,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function startMatching() {
         if (isSearching) return;
-        if (!db || !numericId || !userProfile) return;
+        if (!db || !numericId) return;
 
         console.log("ChatNova: Searching... ID:", numericId);
         isSearching = true;
@@ -268,7 +204,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const waitingRef = db.ref('waitingUsers/' + numericId);
         waitingRef.set({
-            gender: userProfile.gender || 'unknown',
+            gender: userProfile.gender,
             timestamp: firebase.database.ServerValue.TIMESTAMP
         });
 
@@ -313,14 +249,8 @@ document.addEventListener("DOMContentLoaded", function () {
         if (currentChatId) return;
 
         // Fetch partner profile
-        db.ref('users/' + pId).on('value', (pSnap) => {
-            partnerProfile = pSnap.val();
-            if (partnerProfile && currentChatId === chatId) {
-                partnerName.innerText = partnerProfile.displayName;
-                partnerAvatar.src = partnerProfile.profileImageURL || "https://via.placeholder.com/40";
-            }
-        });
-
+        const pSnap = await db.ref('users/' + pId).once('value');
+        partnerProfile = pSnap.val();
         partnerId = pId;
         currentChatId = chatId;
         isSearching = false;
@@ -328,8 +258,11 @@ document.addEventListener("DOMContentLoaded", function () {
         db.ref('waitingUsers').off('child_added');
 
         // UI Transition
+        partnerName.innerText = partnerProfile ? partnerProfile.displayName : "Stranger";
+        partnerAvatar.src = (partnerProfile && partnerProfile.profileImageURL) ? partnerProfile.profileImageURL : "https://via.placeholder.com/40";
+
         showScreen('screen-chat');
-        messagesContainer.innerHTML = '<div class="system-msg">Connected!</div>';
+        messagesContainer.innerHTML = '<div class="system-msg">Connected! Say hi to ' + (partnerProfile ? partnerProfile.displayName : "Stranger") + '.</div>';
 
         db.ref('activeChats/' + chatId).onDisconnect().remove();
         db.ref('activeChats/' + chatId).on('value', (snapshot) => {
@@ -348,19 +281,28 @@ document.addEventListener("DOMContentLoaded", function () {
 
     async function sendMessage() {
         if (isSendingMessage) return;
+
         const text = chatInput.value.trim();
-        if (!text || !currentChatId) return;
+        if (!text || !currentChatId || !db) return;
 
         try {
             isSendingMessage = true;
-            sendBtn.disabled = true;
+            sendBtn.disabled = true; // Visual feedback & locking
+
+            console.log("ChatNova: Sending message once...");
+
             await db.ref('messages/' + currentChatId).push({
                 senderId: numericId,
                 text: text,
                 timestamp: firebase.database.ServerValue.TIMESTAMP
             });
+
+            console.log("ChatNova: Message Sent Once");
             chatInput.value = '';
+        } catch (error) {
+            console.error("ChatNova: Send failed:", error);
         } finally {
+            // Re-enable after a small delay to prevent rapid spamming
             setTimeout(() => {
                 isSendingMessage = false;
                 sendBtn.disabled = false;
@@ -369,15 +311,23 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
-    sendBtn.addEventListener('click', sendMessage);
-    chatInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
+    // Attach listeners ONCE at the top level of DOMContentLoaded
+    if (sendBtn) {
+        // Remove any existing to be ultra-safe (though not expected here)
+        sendBtn.removeEventListener('click', sendMessage);
+        sendBtn.addEventListener('click', sendMessage);
+    }
 
-    function displayMessage(msg) {
+    if (chatInput) {
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault(); // Prevent new line if it was a textarea
+                sendMessage();
+            }
+        });
+    }
+
+    async function displayMessage(msg) {
         const isMe = msg.senderId === numericId;
         const sender = isMe ? userProfile : partnerProfile;
 
@@ -434,7 +384,6 @@ document.addEventListener("DOMContentLoaded", function () {
         if (currentChatId) {
             db.ref('activeChats/' + currentChatId).off();
             db.ref('messages/' + currentChatId).off();
-            db.ref('users/' + partnerId).off();
             db.ref('activeChats/' + currentChatId).remove();
         }
         db.ref('waitingUsers/' + numericId).remove();
@@ -442,5 +391,12 @@ document.addEventListener("DOMContentLoaded", function () {
         partnerId = null;
         partnerProfile = null;
         isSearching = false;
+    }
+
+    function generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
     }
 });
