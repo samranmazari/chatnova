@@ -584,6 +584,60 @@ header {
 }
 
 /* Mobile Responsiveness */
+/* Crop Modal Styling */
+.crop-container {
+    max-width: 90vw;
+    width: 500px;
+    padding: 1.5rem;
+}
+
+.crop-area {
+    width: 100%;
+    height: 350px;
+    background: #000;
+    margin: 1.5rem 0;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+}
+
+.crop-area img {
+    max-width: 100%;
+    display: block;
+}
+
+.crop-controls {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+}
+
+/* Force Circular View in Cropper.js */
+.cropper-view-box,
+.cropper-face {
+    border-radius: 50%;
+}
+
+.cropper-view-box {
+    outline: 1px solid var(--primary-color);
+    box-shadow: 0 0 0 1px var(--primary-color);
+}
+
+.cropper-line, .cropper-point {
+    background-color: var(--primary-color);
+}
+
+/* Mobile Adjustments for Crop */
+@media (max-width: 600px) {
+    .crop-area {
+        height: 280px;
+    }
+    .crop-container {
+        width: 95vw;
+        padding: 1rem;
+    }
+}
+
 /* Searching Screen */
 .searching-box {
     padding: 4rem 2rem;

@@ -9,6 +9,7 @@
         content="Connect with strangers randomly in real-time. ChatNova is a safe and modern random chat platform.">
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 
@@ -158,10 +159,25 @@
         </div>
     </div>
 
+    <!-- Crop Modal -->
+    <div id="crop-modal" class="overlay hidden">
+        <div class="modal crop-container">
+            <h3>Crop Profile Picture</h3>
+            <div class="crop-area">
+                <img id="crop-image" src="">
+            </div>
+            <div class="crop-controls">
+                <button id="crop-cancel-btn" class="btn btn-secondary">CANCEL</button>
+                <button id="crop-save-btn" class="btn btn-primary">CROP & SAVE</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-storage-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 
     <script src="app.js" defer></script>
     <script>

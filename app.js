@@ -37,6 +37,7 @@ document.addEventListener("DOMContentLoaded", function() {
     let partnerId = null;
     let partnerProfile = null;
     let isSearching = false;
+    let cropper = null;
 
     // DOM Elements
     const ageOverlay = document.getElementById('age-overlay');
@@ -54,6 +55,11 @@ document.addEventListener("DOMContentLoaded", function() {
     const profileImgPreview = document.getElementById('profile-img-preview');
     const profileNameInput = document.getElementById('profile-name-input');
     const displayUserId = document.getElementById('display-userid');
+
+    const cropModal = document.getElementById('crop-modal');
+    const cropImage = document.getElementById('crop-image');
+    const cropSaveBtn = document.getElementById('crop-save-btn');
+    const cropCancelBtn = document.getElementById('crop-cancel-btn');
 
     const messagesContainer = document.getElementById('messages-container');
     const chatInput = document.getElementById('chat-input');
@@ -85,15 +91,16 @@ document.addEventListener("DOMContentLoaded", function() {
 
     async function initUser(gender) {
         if (numericId) {
-            // Fetch existing profile
-            const snapshot = await db.ref('users/' + numericId).once('value');
-            userProfile = snapshot.val();
-            loadProfileToUI();
+            // Setup real-time listener for user profile
+            db.ref('users/' + numericId).on('value', (snapshot) => {
+                userProfile = snapshot.val();
+                if (userProfile) loadProfileToUI();
+            });
             return;
         }
 
         // Generate New Sequential ID
-        console.log("ChatNova: Generating new sequential ID...");
+        console.log("ChatNova: Generating new ID...");
         db.ref('userCounter').transaction((current) => {
             return (current || 1000) + 1;
         }, async (error, committed, snapshot) => {
@@ -111,8 +118,13 @@ document.addEventListener("DOMContentLoaded", function() {
                 };
                 
                 await db.ref('users/' + numericId).set(userProfile);
-                console.log("ChatNova: Profile created for ID", numericId);
-                loadProfileToUI();
+                console.log("ChatNova: Profile created for", numericId);
+                
+                // Setup listener after creation
+                db.ref('users/' + numericId).on('value', (snapshot) => {
+                    userProfile = snapshot.val();
+                    loadProfileToUI();
+                });
             }
         });
     }
@@ -126,7 +138,87 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
-    // --- EVENT LISTENERS ---
+    // --- IMAGE CROPPING SYSTEM ---
+
+    avatarInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            alert("Please select an image file (JPG, PNG, etc.)");
+            return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            alert("File is too large! Max size is 5MB.");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            cropImage.src = event.target.result;
+            cropModal.classList.remove('hidden');
+            
+            if (cropper) cropper.destroy();
+            
+            cropper = new Cropper(cropImage, {
+                aspectRatio: 1,
+                viewMode: 1,
+                guides: false,
+                autoCropArea: 1,
+                movable: true,
+                zoomable: true,
+                rotatable: false,
+                scalable: false
+            });
+        };
+        reader.readAsDataURL(file);
+    });
+
+    cropCancelBtn.addEventListener('click', () => {
+        cropModal.classList.add('hidden');
+        if (cropper) cropper.destroy();
+        avatarInput.value = '';
+    });
+
+    cropSaveBtn.addEventListener('click', async () => {
+        if (!cropper || !numericId) return;
+
+        cropSaveBtn.disabled = true;
+        cropSaveBtn.innerText = "UPLOADING...";
+
+        // Get cropped canvas
+        const canvas = cropper.getCroppedCanvas({
+            width: 400,
+            height: 400
+        });
+
+        canvas.toBlob(async (blob) => {
+            try {
+                const storageRef = storage.ref(`avatars/${numericId}_${Date.now()}.jpg`);
+                const uploadTask = await storageRef.put(blob);
+                const url = await uploadTask.ref.getDownloadURL();
+
+                // Update Profile in Realtime Database
+                await db.ref('users/' + numericId).update({
+                    profileImageURL: url
+                });
+
+                console.log("ChatNova: Profile picture updated successfully!");
+                cropModal.classList.add('hidden');
+            } catch (error) {
+                console.error("ChatNova: Upload error:", error);
+                alert("Failed to upload image. Please try again.");
+            } finally {
+                cropSaveBtn.disabled = false;
+                cropSaveBtn.innerText = "CROP & SAVE";
+                if (cropper) cropper.destroy();
+                avatarInput.value = '';
+            }
+        }, 'image/jpeg', 0.9);
+    });
+
+    // --- NAVIGATION & CHAT ---
 
     document.getElementById('age-yes').addEventListener('click', () => {
         ageOverlay.classList.add('fade-out');
@@ -166,30 +258,9 @@ document.addEventListener("DOMContentLoaded", function() {
         if (!numericId) return;
         const newName = profileNameInput.value.trim();
         if (newName) {
-            userProfile.displayName = newName;
             await db.ref('users/' + numericId).update({ displayName: newName });
-            alert("Profile updated!");
+            alert("Display name updated!");
         }
-    });
-
-    avatarInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file || !numericId) return;
-
-        const storageRef = storage.ref(`avatars/${numericId}`);
-        const uploadTask = storageRef.put(file);
-
-        uploadTask.on('state_changed', 
-            null, 
-            (error) => console.error("Upload failed:", error),
-            async () => {
-                const url = await uploadTask.snapshot.ref.getDownloadURL();
-                userProfile.profileImageURL = url;
-                profileImgPreview.src = url;
-                await db.ref('users/' + numericId).update({ profileImageURL: url });
-                console.log("Avatar updated:", url);
-            }
-        );
     });
 
     // --- MATCHING SYSTEM ---
@@ -198,7 +269,7 @@ document.addEventListener("DOMContentLoaded", function() {
         if (isSearching) return;
         if (!db || !numericId) return;
 
-        console.log("ChatNova: Searching... ID:", numericId);
+        console.log("ChatNova: Matching started...");
         isSearching = true;
         showScreen('screen-searching');
 
@@ -248,21 +319,23 @@ document.addEventListener("DOMContentLoaded", function() {
     async function joinChat(chatId, pId) {
         if (currentChatId) return;
         
-        // Fetch partner profile
-        const pSnap = await db.ref('users/' + pId).once('value');
-        partnerProfile = pSnap.val();
+        // Fetch partner profile in real-time
+        db.ref('users/' + pId).on('value', (pSnap) => {
+            partnerProfile = pSnap.val();
+            if (partnerProfile && currentChatId === chatId) {
+                partnerName.innerText = partnerProfile.displayName;
+                partnerAvatar.src = partnerProfile.profileImageURL || "https://via.placeholder.com/40";
+            }
+        });
+
         partnerId = pId;
         currentChatId = chatId;
         isSearching = false;
 
         db.ref('waitingUsers').off('child_added');
 
-        // UI Transition
-        partnerName.innerText = partnerProfile ? partnerProfile.displayName : "Stranger";
-        partnerAvatar.src = (partnerProfile && partnerProfile.profileImageURL) ? partnerProfile.profileImageURL : "https://via.placeholder.com/40";
-        
         showScreen('screen-chat');
-        messagesContainer.innerHTML = '<div class="system-msg">Connected! Say hi to ' + (partnerProfile ? partnerProfile.displayName : "Stranger") + '.</div>';
+        messagesContainer.innerHTML = '<div class="system-msg">Connected! Say hi.</div>';
         
         db.ref('activeChats/' + chatId).onDisconnect().remove();
         db.ref('activeChats/' + chatId).on('value', (snapshot) => {
@@ -287,10 +360,8 @@ document.addEventListener("DOMContentLoaded", function() {
 
         try {
             isSendingMessage = true;
-            sendBtn.disabled = true; // Visual feedback & locking
+            sendBtn.disabled = true;
             
-            console.log("ChatNova: Sending message once...");
-
             await db.ref('messages/' + currentChatId).push({
                 senderId: numericId,
                 text: text,
@@ -299,10 +370,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
             console.log("ChatNova: Message Sent Once");
             chatInput.value = '';
-        } catch (error) {
-            console.error("ChatNova: Send failed:", error);
         } finally {
-            // Re-enable after a small delay to prevent rapid spamming
             setTimeout(() => {
                 isSendingMessage = false;
                 sendBtn.disabled = false;
@@ -311,9 +379,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
-    // Attach listeners ONCE at the top level of DOMContentLoaded
     if (sendBtn) {
-        // Remove any existing to be ultra-safe (though not expected here)
         sendBtn.removeEventListener('click', sendMessage);
         sendBtn.addEventListener('click', sendMessage);
     }
@@ -321,14 +387,17 @@ document.addEventListener("DOMContentLoaded", function() {
     if (chatInput) {
         chatInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
-                e.preventDefault(); // Prevent new line if it was a textarea
+                e.preventDefault();
                 sendMessage();
             }
         });
     }
 
-    async function displayMessage(msg) {
+    function displayMessage(msg) {
         const isMe = msg.senderId === numericId;
+        
+        // Fetch sender data in real-time for message bubbles is complex, 
+        // we use current state snapshots or fetch once
         const sender = isMe ? userProfile : partnerProfile;
         
         const wrapper = document.createElement('div');
@@ -384,6 +453,7 @@ document.addEventListener("DOMContentLoaded", function() {
         if (currentChatId) {
             db.ref('activeChats/' + currentChatId).off();
             db.ref('messages/' + currentChatId).off();
+            db.ref('users/' + partnerId).off(); // Stop listening to partner
             db.ref('activeChats/' + currentChatId).remove();
         }
         db.ref('waitingUsers/' + numericId).remove();
@@ -391,12 +461,5 @@ document.addEventListener("DOMContentLoaded", function() {
         partnerId = null;
         partnerProfile = null;
         isSearching = false;
-    }
-
-    function generateUUID() {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
     }
 });
