@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatNova | Random Real-Time Chat</title>
+    <meta name="description"
+        content="Connect with strangers randomly in real-time. ChatNova is a safe and modern random chat platform.">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+
+    <!-- Age Verification Overlay -->
+    <div id="age-overlay" class="overlay">
+        <div class="modal">
+            <div class="modal-icon"><i data-lucide="shield-alert"></i></div>
+            <h1>Are you 18 or older?</h1>
+            <p>You must be 18 years or older to enter ChatNova. This platform contains content intended for adults only.
+            </p>
+            <div class="modal-actions">
+                <button id="age-yes" class="btn btn-primary">YES, I AM 18+</button>
+                <button id="age-no" class="btn btn-secondary">NO</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <main id="app-container" class="hidden">
+
+        <!-- Header -->
+        <header>
+            <div class="logo">
+                <span class="logo-icon"><i data-lucide="zap"></i></span>
+                Chat<span>Nova</span>
+            </div>
+            <div class="header-right">
+                <button id="profile-btn" class="btn btn-icon" title="My Profile"><i data-lucide="user"></i></button>
+                <div id="user-status" class="status-badge">
+                    <span class="status-dot"></span> Online
+                </div>
+            </div>
+        </header>
+
+        <!-- Screens Container -->
+        <div id="screens-wrapper">
+
+            <!-- Screen 1: Gender Selection -->
+            <section id="screen-gender" class="screen fade-in">
+                <div class="content-box">
+                    <h2>Welcome to ChatNova</h2>
+                    <p>Select your gender to start matching.</p>
+                    <div class="gender-options">
+                        <button class="gender-btn" data-gender="male">
+                            <i data-lucide="user"></i>
+                            <span>Male</span>
+                        </button>
+                        <button class="gender-btn" data-gender="female">
+                            <i data-lucide="user-round"></i>
+                            <span>Female</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Screen 2: Profile Customization -->
+            <section id="screen-profile" class="screen hidden fade-in">
+                <div class="content-box profile-box">
+                    <div class="profile-header">
+                        <button id="profile-back" class="btn btn-icon"><i data-lucide="arrow-left"></i></button>
+                        <h2>My Profile</h2>
+                        <div style="width: 44px"></div>
+                    </div>
+                    
+                    <div class="profile-main">
+                        <div class="profile-avatar-wrapper">
+                            <img id="profile-img-preview" src="https://via.placeholder.com/150" alt="Avatar">
+                            <label for="avatar-input" class="avatar-edit-btn">
+                                <i data-lucide="camera"></i>
+                            </label>
+                            <input type="file" id="avatar-input" accept="image/*" hidden>
+                        </div>
+                        
+                        <div class="id-badge">ID: <span id="display-userid">....</span></div>
+
+                        <div class="input-group">
+                            <label>Display Name</label>
+                            <input type="text" id="profile-name-input" placeholder="Enter name">
+                        </div>
+
+                        <button id="save-profile-btn" class="btn btn-primary btn-large">SAVE CHANGES</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Screen 2: Searching -->
+            <section id="screen-searching" class="screen hidden fade-in">
+                <div class="content-box searching-box">
+                    <div class="searching-animation">
+                        <div class="pulse-ring"></div>
+                        <div class="pulse-ring"></div>
+                        <div class="pulse-ring"></div>
+                        <div class="avatar-searching"><i data-lucide="search"></i></div>
+                    </div>
+                    <h2>Finding a random user...</h2>
+                    <p>Sit tight, we're connecting you to someone new.</p>
+                    <div class="searching-dots">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Screen 4: Chat Interface -->
+            <section id="screen-chat" class="screen hidden fade-in">
+                <div class="chat-wrapper">
+                    <div class="chat-header">
+                        <div class="partner-info">
+                            <div class="avatar-container">
+                                <img id="partner-avatar" src="https://via.placeholder.com/40" alt="Avatar">
+                            </div>
+                            <div>
+                                <span id="partner-name">Stranger</span>
+                                <small id="partner-status">Connected</small>
+                            </div>
+                        </div>
+                        <div class="chat-actions">
+                            <button id="next-btn" class="btn btn-icon" title="Next Partner"><i
+                                    data-lucide="fast-forward"></i></button>
+                            <button id="stop-btn" class="btn btn-icon btn-danger" title="Stop"><i
+                                    data-lucide="square"></i></button>
+                        </div>
+                    </div>
+
+                    <div id="messages-container" class="messages-area">
+                        <div class="system-msg">You are now chatting with a stranger. Say hi!</div>
+                    </div>
+
+                    <div class="input-area">
+                        <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off">
+                        <button id="send-btn" class="btn btn-primary btn-square"><i data-lucide="send"></i></button>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- Blocked Access Screen -->
+    <div id="blocked-screen" class="overlay hidden full-screen-block">
+        <div class="modal">
+            <div class="modal-icon danger"><i data-lucide="lock"></i></div>
+            <h1>Access Blocked</h1>
+            <p>You cannot access this platform. Minimum age required is 18+.</p>
+            <div class="status-msg">Access denied permanently for this session.</div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-storage-compat.js"></script>
+
+    <script src="app.js" defer></script>
+    <script>
+        console.log("ChatNova: Scripts initialized");
+        // Initialize Lucide icons
+        window.addEventListener('load', () => {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        });
+    </script>
+</body>
+
+</html>
