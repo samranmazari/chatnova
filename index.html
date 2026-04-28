@@ -9,7 +9,6 @@
         content="Connect with strangers randomly in real-time. ChatNova is a safe and modern random chat platform.">
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 
@@ -159,33 +158,10 @@
         </div>
     </div>
 
-    <!-- Crop Modal -->
-    <div id="crop-modal" class="overlay hidden full-screen-modal">
-        <div class="crop-container-pro">
-            <div class="crop-header">
-                <h2>Edit Profile Picture</h2>
-                <button id="crop-cancel-btn" class="btn btn-icon"><i data-lucide="x"></i></button>
-            </div>
-            
-            <div class="crop-view-area">
-                <img id="crop-image" src="">
-            </div>
-
-            <div class="crop-footer">
-                <div id="upload-status" class="status-msg-pro hidden">Uploading...</div>
-                <div class="crop-actions-row">
-                    <label for="avatar-input" class="btn btn-secondary">CHANGE IMAGE</label>
-                    <button id="crop-save-btn" class="btn btn-primary btn-large">SAVE PROFILE PICTURE</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-storage-compat.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 
     <script src="app.js" defer></script>
     <script>
