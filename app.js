@@ -277,23 +277,55 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // --- CHAT SYSTEM ---
 
-    function sendMessage() {
+    let isSendingMessage = false;
+
+    async function sendMessage() {
+        if (isSendingMessage) return;
+        
         const text = chatInput.value.trim();
-        if (!text || !currentChatId) return;
+        if (!text || !currentChatId || !db) return;
 
-        db.ref('messages/' + currentChatId).push({
-            senderId: numericId,
-            text: text,
-            timestamp: firebase.database.ServerValue.TIMESTAMP
-        });
+        try {
+            isSendingMessage = true;
+            sendBtn.disabled = true; // Visual feedback & locking
+            
+            console.log("ChatNova: Sending message once...");
 
-        chatInput.value = '';
+            await db.ref('messages/' + currentChatId).push({
+                senderId: numericId,
+                text: text,
+                timestamp: firebase.database.ServerValue.TIMESTAMP
+            });
+
+            console.log("ChatNova: Message Sent Once");
+            chatInput.value = '';
+        } catch (error) {
+            console.error("ChatNova: Send failed:", error);
+        } finally {
+            // Re-enable after a small delay to prevent rapid spamming
+            setTimeout(() => {
+                isSendingMessage = false;
+                sendBtn.disabled = false;
+                chatInput.focus();
+            }, 300);
+        }
     }
 
-    sendBtn.addEventListener('click', sendMessage);
-    chatInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
-    });
+    // Attach listeners ONCE at the top level of DOMContentLoaded
+    if (sendBtn) {
+        // Remove any existing to be ultra-safe (though not expected here)
+        sendBtn.removeEventListener('click', sendMessage);
+        sendBtn.addEventListener('click', sendMessage);
+    }
+
+    if (chatInput) {
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault(); // Prevent new line if it was a textarea
+                sendMessage();
+            }
+        });
+    }
 
     async function displayMessage(msg) {
         const isMe = msg.senderId === numericId;
