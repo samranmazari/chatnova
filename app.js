@@ -230,10 +230,18 @@ document.addEventListener("DOMContentLoaded", function () {
             if (navbar) navbar.classList.add('hidden');
             document.body.classList.add('app-active');
 
-            // Automatically initialize guest user and show app
+            // Initialize User
             await initializeGuestUser();
             appContainer.classList.remove('hidden');
-            showScreen('screen-gender');
+
+            // --- INSTANT FLOW ---
+            // If user already has a gender set from a previous session, go straight to searching!
+            if (userProfile && userProfile.gender) {
+                console.log("ChatNova: Existing user detected, starting match immediately");
+                startMatching('random');
+            } else {
+                showScreen('screen-gender');
+            }
         }, 500);
     });
 
@@ -473,6 +481,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
         console.log("ChatNova: Searching users...");
         isSearching = true;
+
+        // Reset Searching UI to default state
+        const searchingTitle = document.querySelector('.searching-title');
+        if (searchingTitle) {
+            searchingTitle.innerText = "Finding someone to chat with...";
+            searchingTitle.style.color = ""; // Reset color
+        }
+
         showScreen('screen-searching');
 
         // Reset state
@@ -540,7 +556,13 @@ document.addEventListener("DOMContentLoaded", function () {
             return undefined;
         }, async (error, committed) => {
             if (committed) {
-                console.log("ChatNova: Chat created");
+                // MATCH FOUND FEEDBACK
+                const searchingTitle = document.querySelector('.searching-title');
+                if (searchingTitle) {
+                    searchingTitle.innerText = "Match Found! Connecting...";
+                    searchingTitle.style.color = "#4ade80"; // Success Green
+                }
+
                 await db.ref('waitingUsers/' + numericId).remove();
                 
                 const newChatId = db.ref('activeChats').push().key;
@@ -556,7 +578,11 @@ document.addEventListener("DOMContentLoaded", function () {
                 });
 
                 console.log("ChatNova: Connected");
-                await joinChat(newChatId, targetPartnerId);
+                
+                // Small delay to let the user see the "Match Found" state
+                setTimeout(() => {
+                    joinChat(newChatId, targetPartnerId);
+                }, 800);
             }
         });
     }
