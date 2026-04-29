@@ -170,11 +170,63 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // --- EVENT LISTENERS ---
 
+    // --- LANDING PAGE LOGIC ---
+    const landingPage = document.getElementById('landing-page');
+    const startChatBtn = document.getElementById('start-chat-btn');
+    const navbar = document.querySelector('.navbar');
+
+    function createParticles() {
+        const container = document.getElementById('particles');
+        if (!container) return;
+        const particleCount = 40;
+        for (let i = 0; i < particleCount; i++) {
+            const particle = document.createElement('div');
+            particle.style.position = 'absolute';
+            particle.style.background = 'rgba(168, 85, 247, 0.4)';
+            particle.style.borderRadius = '50%';
+            const size = Math.random() * 5 + 2;
+            particle.style.width = `${size}px`;
+            particle.style.height = `${size}px`;
+            particle.style.left = `${Math.random() * 100}%`;
+            particle.style.top = `${Math.random() * 100}%`;
+            particle.style.filter = 'blur(1px)';
+            
+            // Animation
+            const duration = Math.random() * 30 + 20;
+            particle.animate([
+                { transform: 'translate(0, 0)' },
+                { transform: `translate(${Math.random() * 200 - 100}px, ${Math.random() * 200 - 100}px)` }
+            ], {
+                duration: duration * 1000,
+                iterations: Infinity,
+                direction: 'alternate',
+                easing: 'linear'
+            });
+            
+            container.appendChild(particle);
+        }
+    }
+
+    createParticles();
+
+    if (startChatBtn) {
+        startChatBtn.addEventListener('click', () => {
+            ageOverlay.classList.remove('hidden');
+        });
+    }
+
+    // --- EVENT LISTENERS ---
+
     document.getElementById('age-yes').addEventListener('click', async () => {
         ageOverlay.classList.add('fade-out');
         setTimeout(async () => {
             ageOverlay.classList.add('hidden');
             ageOverlay.classList.remove('fade-out');
+            
+            // Hide Landing Page
+            if (landingPage) landingPage.classList.add('hidden');
+            if (navbar) navbar.classList.add('hidden');
+            document.body.classList.add('app-active');
 
             // Automatically initialize guest user and show app
             await initializeGuestUser();

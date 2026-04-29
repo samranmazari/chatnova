@@ -16,13 +16,70 @@
 
 <body>
 
+    <!-- Background Elements -->
+    <div class="bg-wrapper">
+        <div class="bg-gradient"></div>
+        <div class="bg-particles" id="particles"></div>
+        <div class="bg-lines"></div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="navbar fade-in">
+        <div class="nav-container">
+            <div class="logo">
+                <span class="logo-icon"><i data-lucide="zap"></i></span>
+                Chat<span>Nova</span>
+            </div>
+            <div class="nav-menu">
+                <a href="#" class="nav-link active">Home</a>
+                <a href="#" class="nav-link">About</a>
+                <a href="#" class="nav-link">Support</a>
+            </div>
+            <div class="nav-actions">
+                <button class="btn btn-secondary btn-sm">Login</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Landing Page Hero -->
+    <section id="landing-page" class="hero-section fade-in">
+        <div class="hero-container">
+            <div class="hero-content">
+                <h1 class="hero-title">Talk to strangers,<br>Make friends!</h1>
+                <p class="hero-subtitle">Connect with people around the world through random text chat. Fast, secure, and completely free.</p>
+                <div class="hero-actions">
+                    <button id="start-chat-btn" class="btn btn-primary btn-glow btn-lg">
+                        <span>Start Text Chat</span>
+                        <i data-lucide="message-square"></i>
+                    </button>
+                    <button class="btn btn-glass btn-lg">How it works</button>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="floating-cards">
+                    <div class="float-card card-1">
+                        <div class="card-avatar"><img src="https://i.pravatar.cc/100?u=1" alt=""></div>
+                        <div class="card-msg">Hi there! 👋</div>
+                    </div>
+                    <div class="float-card card-2">
+                        <div class="card-avatar"><img src="https://i.pravatar.cc/100?u=2" alt=""></div>
+                        <div class="card-msg">Where are you from?</div>
+                    </div>
+                    <div class="float-card card-3">
+                        <div class="card-avatar"><img src="https://i.pravatar.cc/100?u=3" alt=""></div>
+                        <div class="card-msg">Hello! Let's chat!</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- Age Verification Overlay -->
-    <div id="age-overlay" class="overlay">
-        <div class="modal">
+    <div id="age-overlay" class="overlay hidden">
+        <div class="modal glass-modal">
             <div class="modal-icon"><i data-lucide="shield-alert"></i></div>
             <h1>Are you 18 or older?</h1>
-            <p>You must be 18 years or older to enter ChatNova. This platform contains content intended for adults only.
-            </p>
+            <p>You must be 18 years or older to enter ChatNova. This platform contains content intended for adults only.</p>
             <div class="modal-actions">
                 <button id="age-yes" class="btn btn-primary">YES, I AM 18+</button>
                 <button id="age-no" class="btn btn-secondary">NO</button>
@@ -30,12 +87,10 @@
         </div>
     </div>
 
-
-    <!-- Main Container -->
+    <!-- Main App Container -->
     <main id="app-container" class="hidden">
-
-        <!-- Header -->
-        <header>
+        <!-- Header (Inside Chat App) -->
+        <header class="app-header">
             <div class="logo">
                 <span class="logo-icon"><i data-lucide="zap"></i></span>
                 Chat<span>Nova</span>
