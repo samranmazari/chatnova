@@ -133,7 +133,6 @@ document.addEventListener("DOMContentLoaded", function () {
                     authProvider: "guest",
                     gender: "",
                     isPremium: false,
-                    matchedWith: null, // Track match status directly
                     createdAt: firebase.database.ServerValue.TIMESTAMP
                 };
 
@@ -147,22 +146,12 @@ document.addEventListener("DOMContentLoaded", function () {
     function attachProfileListener() {
         if (!numericId || !db) return;
 
-        db.ref('users/' + numericId).on('value', async (snapshot) => {
+        db.ref('users/' + numericId).on('value', (snapshot) => {
             const data = snapshot.val();
             if (data) {
                 userProfile = data;
                 loadProfileToUI();
-                
-                // --- PASSIVE MATCHING LISTENER ---
-                if (userProfile.matchedWith && isSearching) {
-                    console.log("ChatNova: Matched by another user!", userProfile.matchedWith);
-                    const { chatId, partnerId: pId } = userProfile.matchedWith;
-                    
-                    // Clear matchedWith so we don't trigger again
-                    await db.ref('users/' + numericId).update({ matchedWith: null });
-                    
-                    await joinChat(chatId, pId);
-                }
+                console.log("ChatNova: Profile synced in real-time");
             }
         });
     }
@@ -203,7 +192,7 @@ document.addEventListener("DOMContentLoaded", function () {
             particle.style.left = `${Math.random() * 100}%`;
             particle.style.top = `${Math.random() * 100}%`;
             particle.style.filter = 'blur(1px)';
-            
+
             // Animation
             const duration = Math.random() * 30 + 20;
             particle.animate([
@@ -215,7 +204,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 direction: 'alternate',
                 easing: 'linear'
             });
-            
+
             container.appendChild(particle);
         }
     }
@@ -235,7 +224,7 @@ document.addEventListener("DOMContentLoaded", function () {
         setTimeout(async () => {
             ageOverlay.classList.add('hidden');
             ageOverlay.classList.remove('fade-out');
-            
+
             // Hide Landing Page
             if (landingPage) landingPage.classList.add('hidden');
             if (navbar) navbar.classList.add('hidden');
@@ -262,7 +251,7 @@ document.addEventListener("DOMContentLoaded", function () {
             }
             document.querySelectorAll('.gender-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            
+
             // Transition to Matching Choice
             setTimeout(() => {
                 showScreen('screen-matching-choice');
@@ -274,7 +263,7 @@ document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll('.match-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const preference = btn.getAttribute('data-preference');
-            
+
             if (btn.classList.contains('locked') && (!userProfile || !userProfile.isPremium)) {
                 // Show Premium Modal
                 document.getElementById('premium-modal').classList.remove('hidden');
@@ -294,13 +283,13 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById('upgrade-now-btn').addEventListener('click', async () => {
         // Mock Upgrade Process
         if (!numericId) return;
-        
+
         try {
             document.getElementById('upgrade-now-btn').innerText = "UPGRADING...";
             await db.ref('users/' + numericId).update({ isPremium: true });
-            
+
             if (userProfile) userProfile.isPremium = true;
-            
+
             // Update UI
             document.querySelectorAll('.match-btn.premium').forEach(btn => {
                 btn.classList.remove('locked');
@@ -470,33 +459,39 @@ document.addEventListener("DOMContentLoaded", function () {
     document.getElementById('zoom-out').addEventListener('click', () => cropper && cropper.zoom(-0.1));
 
     // --- MATCHING SYSTEM ---
-
+    let matchHeartbeatInterval = null;
     let matchRetryTimeout = null;
 
     function startMatching(preference = 'random') {
         if (isSearching) return;
-        if (!db || !numericId) return;
+        if (!db || !numericId) {
+            console.error("ChatNova: Cannot start matching - missing ID or DB");
+            return;
+        }
 
-        console.log("ChatNova: [START SEARCH] Preference:", preference);
+        const myGender = userProfile.gender || "unknown";
+        console.log("ChatNova: [START SEARCH] Preference:", preference, "My Gender:", myGender);
+        
         isSearching = true;
         showScreen('screen-searching');
 
-        // Reset state
         if (matchRetryTimeout) clearTimeout(matchRetryTimeout);
+        if (matchHeartbeatInterval) clearInterval(matchHeartbeatInterval);
 
         const waitingRef = db.ref('waitingUsers/' + numericId);
-        waitingRef.set({
-            userId: numericId,
-            gender: userProfile.gender || "unknown",
-            preference: preference,
-            timestamp: firebase.database.ServerValue.TIMESTAMP
-        }).then(() => {
-            console.log("ChatNova: Added to waiting queue");
-        });
+        const updateWaitingStatus = () => {
+            waitingRef.set({
+                userId: numericId,
+                gender: myGender,
+                preference: preference,
+                timestamp: firebase.database.ServerValue.TIMESTAMP
+            });
+        };
 
+        updateWaitingStatus();
+        matchHeartbeatInterval = setInterval(updateWaitingStatus, 10000);
         waitingRef.onDisconnect().remove();
 
-        // Listener for other waiting users
         const waitingListRef = db.ref('waitingUsers');
         waitingListRef.off('child_added');
         waitingListRef.on('child_added', (snapshot) => {
@@ -507,11 +502,7 @@ document.addEventListener("DOMContentLoaded", function () {
             const potentialPartner = snapshot.val();
             if (!potentialPartner) return;
 
-            // COMPATIBILITY CHECK
             let isCompatible = false;
-            
-            // Preference logic
-            const myGender = userProfile.gender || "unknown";
             const partnerGender = potentialPartner.gender || "unknown";
             const partnerPref = potentialPartner.preference || "random";
 
@@ -521,64 +512,51 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
             }
 
-            if (isCompatible) {
-                console.log("ChatNova: Compatible partner found:", pId);
-                // The user with the smaller ID initiates to avoid dual-matching
-                if (numericId < pId) {
-                    tryMatch(pId, potentialPartner);
-                }
+            if (isCompatible && numericId < pId) {
+                console.log("ChatNova: Initiating match with:", pId);
+                tryMatch(pId);
             }
         });
 
-        // Timeout handler: If no match in 15s, refresh the search
         matchRetryTimeout = setTimeout(() => {
             if (isSearching && !currentChatId) {
-                console.log("ChatNova: No users found, retrying...");
+                console.log("ChatNova: Search timeout, restarting...");
                 restartSearch(preference);
             }
         }, 15000);
     }
 
     async function restartSearch(preference) {
+        if (matchHeartbeatInterval) clearInterval(matchHeartbeatInterval);
         await db.ref('waitingUsers/' + numericId).remove();
         isSearching = false;
         startMatching(preference);
     }
 
-    function tryMatch(targetPartnerId, partnerData) {
+    function tryMatch(targetPartnerId) {
         if (!isSearching) return;
 
-        console.log("ChatNova: Attempting match with:", targetPartnerId);
-
-        // Attempt to claim BOTH users in the waiting list
         db.ref('waitingUsers/' + targetPartnerId).transaction((current) => {
-            if (current) return null; // Remove partner from waiting
-            return undefined; // Abort
+            if (current) return null;
+            return undefined;
         }, async (error, committed) => {
             if (committed) {
-                // Partner claimed! Now remove ourselves
                 await db.ref('waitingUsers/' + numericId).remove();
+                console.log("ChatNova: Match successful, creating chat...");
                 
-                console.log("ChatNova: Match Successful!");
                 const newChatId = db.ref('activeChats').push().key;
-                
-                // Create chat record
                 await db.ref('activeChats/' + newChatId).set({
                     u1: numericId,
                     u2: targetPartnerId,
                     createdAt: firebase.database.ServerValue.TIMESTAMP
                 });
 
-                // Notify partner directly via their user profile
                 await db.ref('users/' + targetPartnerId + '/matchedWith').set({
                     chatId: newChatId,
                     partnerId: numericId
                 });
 
-                // Join chat ourselves
                 await joinChat(newChatId, targetPartnerId);
-            } else {
-                console.log("ChatNova: Partner already taken, skipping.");
             }
         });
     }
@@ -595,6 +573,7 @@ document.addEventListener("DOMContentLoaded", function () {
         partnerId = pId;
         currentChatId = chatId;
         isSearching = false;
+        if (matchHeartbeatInterval) clearInterval(matchHeartbeatInterval);
 
         db.ref('waitingUsers').off('child_added');
         db.ref('activeChats').off('child_added');
@@ -741,7 +720,8 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     function cleanupChat() {
-        if (matchRetryTimeout) clearTimeout(matchRetryTimeout);
+        if (typeof matchRetryTimeout !== 'undefined' && matchRetryTimeout) clearTimeout(matchRetryTimeout);
+        if (matchHeartbeatInterval) clearInterval(matchHeartbeatInterval);
         
         if (currentChatId) {
             db.ref('activeChats/' + currentChatId).off();
