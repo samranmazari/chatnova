@@ -133,6 +133,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     authProvider: "guest",
                     gender: "",
                     isPremium: false,
+                    currentChat: null, // Critical for sync
                     createdAt: firebase.database.ServerValue.TIMESTAMP
                 };
 
@@ -146,12 +147,23 @@ document.addEventListener("DOMContentLoaded", function () {
     function attachProfileListener() {
         if (!numericId || !db) return;
 
-        db.ref('users/' + numericId).on('value', (snapshot) => {
+        db.ref('users/' + numericId).on('value', async (snapshot) => {
             const data = snapshot.val();
             if (data) {
                 userProfile = data;
                 loadProfileToUI();
-                console.log("ChatNova: Profile synced in real-time");
+                
+                // --- REAL-TIME MATCH SYNC LISTENER ---
+                if (userProfile.currentChat && isSearching) {
+                    console.log("ChatNova: Listener triggered - User matched!");
+                    const { chatId, partnerId: pId } = userProfile.currentChat;
+                    
+                    // Clear sync flag so we don't loop
+                    await db.ref('users/' + numericId).update({ currentChat: null });
+                    
+                    console.log("ChatNova: Opening chat screen...");
+                    await joinChat(chatId, pId);
+                }
             }
         });
     }
@@ -474,30 +486,24 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function startMatching(preference = 'random') {
         if (isSearching) return;
-        if (!db || !numericId) {
-            console.error("ChatNova: Cannot start matching - missing ID or DB");
-            return;
-        }
+        if (!db || !numericId) return;
 
         console.log("ChatNova: Searching users...");
         isSearching = true;
-
-        // Reset Searching UI to default state
+        
+        // Reset Searching UI
         const searchingTitle = document.querySelector('.searching-title');
         if (searchingTitle) {
             searchingTitle.innerText = "Finding someone to chat with...";
-            searchingTitle.style.color = ""; // Reset color
+            searchingTitle.style.color = "";
         }
-
+        
         showScreen('screen-searching');
 
-        // Reset state
         if (matchRetryTimeout) clearTimeout(matchRetryTimeout);
         if (matchHeartbeatInterval) clearInterval(matchHeartbeatInterval);
 
         const waitingRef = db.ref('waitingUsers/' + numericId);
-        console.log("ChatNova: User added to waiting list");
-        
         const updateWaitingStatus = () => {
             waitingRef.set({
                 userId: numericId,
@@ -508,7 +514,7 @@ document.addEventListener("DOMContentLoaded", function () {
         };
 
         updateWaitingStatus();
-        matchHeartbeatInterval = setInterval(updateWaitingStatus, 5000); // Faster heartbeat
+        matchHeartbeatInterval = setInterval(updateWaitingStatus, 5000);
         waitingRef.onDisconnect().remove();
 
         const waitingListRef = db.ref('waitingUsers');
@@ -521,22 +527,18 @@ document.addEventListener("DOMContentLoaded", function () {
             const potentialPartner = snapshot.val();
             if (!potentialPartner) return;
 
-            // --- UNIVERSAL MATCHING (NO FILTER) ---
-            // As requested: male/male, female/female, male/female all connect.
-            console.log("ChatNova: User found, attempting match...");
-            
+            // Universal Matching
             if (numericId < pId) {
                 tryMatch(pId);
             }
         });
 
-        // Failsafe restart
         matchRetryTimeout = setTimeout(() => {
             if (isSearching && !currentChatId) {
                 console.log("ChatNova: Retrying search...");
                 restartSearch(preference);
             }
-        }, 10000);
+        }, 12000);
     }
 
     async function restartSearch(preference) {
@@ -549,40 +551,39 @@ document.addEventListener("DOMContentLoaded", function () {
     function tryMatch(targetPartnerId) {
         if (!isSearching) return;
 
-        console.log("ChatNova: Attempting transaction with:", targetPartnerId);
+        console.log("ChatNova: User matched, attempting connection...");
 
         db.ref('waitingUsers/' + targetPartnerId).transaction((current) => {
             if (current) return null;
             return undefined;
         }, async (error, committed) => {
             if (committed) {
-                // MATCH FOUND FEEDBACK
-                const searchingTitle = document.querySelector('.searching-title');
-                if (searchingTitle) {
-                    searchingTitle.innerText = "Match Found! Connecting...";
-                    searchingTitle.style.color = "#4ade80"; // Success Green
-                }
-
-                await db.ref('waitingUsers/' + numericId).remove();
+                console.log("ChatId assigned to both users");
                 
                 const newChatId = db.ref('activeChats').push().key;
+                
+                // 1. Create chat record
                 await db.ref('activeChats/' + newChatId).set({
                     u1: numericId,
                     u2: targetPartnerId,
+                    status: 'active',
                     createdAt: firebase.database.ServerValue.TIMESTAMP
                 });
 
-                await db.ref('users/' + targetPartnerId + '/matchedWith').set({
+                // 2. Notify BOTH users via their profile (Critical for Sync)
+                await db.ref('users/' + targetPartnerId + '/currentChat').set({
                     chatId: newChatId,
                     partnerId: numericId
                 });
 
-                console.log("ChatNova: Connected");
+                await db.ref('users/' + numericId + '/currentChat').set({
+                    chatId: newChatId,
+                    partnerId: targetPartnerId
+                });
                 
-                // Small delay to let the user see the "Match Found" state
-                setTimeout(() => {
-                    joinChat(newChatId, targetPartnerId);
-                }, 800);
+                // No need to call joinChat directly, the listener will handle it for both!
+                console.log("ChatNova: Match notification sent to both clients");
+                await db.ref('waitingUsers/' + numericId).remove();
             }
         });
     }
@@ -724,12 +725,14 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     function handlePartnerLeft() {
+        console.log("ChatNova: User disconnected");
         const div = document.createElement('div');
         div.className = 'system-msg';
-        div.innerText = "Partner disconnected.";
+        div.innerText = "Partner disconnected. Restarting search...";
         messagesContainer.appendChild(div);
+        
         setTimeout(() => {
-            if (!currentChatId) return;
+            console.log("ChatNova: Restarting search");
             cleanupChat();
             startMatching();
         }, 2000);
