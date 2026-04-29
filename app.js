@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // Initialize Firebase
     let db = null;
     let storage = null;
+    let auth = null;
     try {
         if (typeof firebase !== 'undefined') {
             if (!firebase.apps.length) {
@@ -24,7 +25,8 @@ document.addEventListener("DOMContentLoaded", function () {
             }
             db = firebase.database();
             storage = firebase.storage();
-            console.log("ChatNova: Firebase & Storage initialized");
+            auth = firebase.auth();
+            console.log("ChatNova: Firebase, Auth & Storage initialized");
         }
     } catch (error) {
         console.error("ChatNova: Firebase failed:", error);
@@ -93,6 +95,16 @@ document.addEventListener("DOMContentLoaded", function () {
     // --- USER PROFILE SYSTEM ---
 
     async function initializeGuestUser() {
+        // Ensure anonymous auth for storage access
+        if (auth && !auth.currentUser) {
+            try {
+                await auth.signInAnonymously();
+                console.log("ChatNova: Anonymous session started");
+            } catch (e) {
+                console.error("Auth failed:", e);
+            }
+        }
+
         if (numericId) {
             // Fetch existing profile
             const snapshot = await db.ref('users/' + numericId).once('value');
@@ -249,69 +261,76 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     async function updateProfilePicture() {
-        if (!cropper || !numericId) return;
+        if (!cropper || !numericId) {
+            console.error("Missing state");
+            return;
+        }
 
         try {
-            console.log("Canvas ready: Start");
+            console.log("STEP 1 OK: Canvas ready");
             uploadStatus.classList.remove('hidden');
             cropSave.disabled = true;
 
-            // 1. Get Cropped Canvas
+            // 1. Get cropped canvas
             const canvas = cropper.getCroppedCanvas({
                 width: 300,
                 height: 300
             });
             if (!canvas) throw new Error("Canvas generation failed");
-            console.log("Canvas ready: Success");
 
-            // 2. Convert to Blob
+            // 2. Convert canvas to Blob (MANDATORY)
             const blob = await new Promise((resolve, reject) => {
                 canvas.toBlob((b) => {
                     if (b) {
-                        console.log("Blob created: Success");
+                        console.log("BLOB CREATED");
                         resolve(b);
                     } else {
-                        reject(new Error("Blob creation failed"));
+                        reject(new Error("Blob failed"));
                     }
-                }, 'image/jpeg', 0.90);
+                }, 'image/jpeg', 0.85);
             });
 
-            // 3. Upload to Firebase Storage
-            console.log("Upload started");
+            // 3. Create Storage reference
             const storageRef = storage.ref(`avatars/${numericId}.jpg`);
+
+            // 4. Upload and WAIT for completion
+            console.log("UPLOAD STARTED");
             const uploadTask = storageRef.put(blob, { contentType: 'image/jpeg' });
 
-            // Explicit Promise for Upload Task
             const snapshot = await new Promise((resolve, reject) => {
+                // Safety timeout to prevent infinite loading (30 seconds)
+                const timeout = setTimeout(() => reject(new Error("Upload timed out")), 30000);
+
                 uploadTask.on('state_changed', 
-                    (snapshot) => {
-                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                        console.log('Upload progress: ' + Math.round(progress) + '%');
+                    (snap) => {
+                        const progress = (snap.bytesTransferred / snap.totalBytes) * 100;
+                        console.log('Progress: ' + Math.round(progress) + '%');
                     }, 
-                    (error) => {
-                        console.error("Upload error:", error);
-                        reject(error);
+                    (err) => {
+                        clearTimeout(timeout);
+                        reject(err);
                     }, 
                     () => {
-                        console.log("Upload completed: Success");
+                        clearTimeout(timeout);
+                        console.log("UPLOAD FINISHED");
                         resolve(uploadTask.snapshot);
                     }
                 );
             });
 
-            // 4. Get Download URL
-            const downloadURL = await snapshot.ref.getDownloadURL();
-            console.log("URL fetched: Success", downloadURL);
+            // 5. Get download URL
+            const url = await snapshot.ref.getDownloadURL();
+            console.log("URL RECEIVED");
 
-            // 5. Update Database
+            // 6. Save URL to Database
             await db.ref('users/' + numericId).update({ 
-                profileImageURL: downloadURL,
+                profileImageURL: url,
                 lastUpdated: firebase.database.ServerValue.TIMESTAMP 
             });
-            console.log("Database updated: Success");
+            console.log("DATABASE UPDATED");
 
-            // 6. UI Cleanup
-            alert("Profile picture updated successfully!");
+            // 7. Update UI
+            alert("Profile picture saved successfully!");
             cropModal.classList.add('hidden');
             if (cropper) {
                 cropper.destroy();
@@ -320,9 +339,10 @@ document.addEventListener("DOMContentLoaded", function () {
             avatarInput.value = '';
 
         } catch (error) {
-            console.error("ChatNova: Update Profile Picture Failed", error);
-            alert("Update Failed: " + error.message);
+            console.error("ChatNova Root Error:", error);
+            alert("Save failed: " + error.message);
         } finally {
+            console.log("FORCING LOADING STOP");
             uploadStatus.classList.add('hidden');
             cropSave.disabled = false;
         }
