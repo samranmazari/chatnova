@@ -15,8 +15,8 @@ document.addEventListener("DOMContentLoaded", function () {
     console.log("ChatNova: DOM fully loaded");
 
     // Cloudinary Config (Unsigned Upload)
-    const CLOUDINARY_CLOUD_NAME = "PASTE_YOUR_CLOUD_NAME_HERE"; 
-    const CLOUDINARY_UPLOAD_PRESET = "PASTE_YOUR_UNSIGNED_PRESET_HERE";
+    const CLOUDINARY_CLOUD_NAME = "abcxyz123";
+    const CLOUDINARY_UPLOAD_PRESET = "chatnova_dp";
 
     // Initialize Firebase
     let db = null;
@@ -35,7 +35,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     // State Variables
-    let numericId = localStorage.getItem('chatnova_userId'); 
+    let numericId = localStorage.getItem('chatnova_userId');
     let userProfile = null;
     let currentChatId = null;
     let partnerId = null;
@@ -144,7 +144,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     function attachProfileListener() {
         if (!numericId || !db) return;
-        
+
         db.ref('users/' + numericId).on('value', (snapshot) => {
             const data = snapshot.val();
             if (data) {
@@ -161,7 +161,7 @@ document.addEventListener("DOMContentLoaded", function () {
         profileNameInput.value = userProfile.displayName;
         if (userProfile.profileImageURL) {
             profileImgPreview.src = userProfile.profileImageURL;
-            
+
             // Update all my sent message avatars in the current chat
             document.querySelectorAll('.message-wrapper.sent .msg-avatar').forEach(img => {
                 img.src = userProfile.profileImageURL;
@@ -176,7 +176,7 @@ document.addEventListener("DOMContentLoaded", function () {
         setTimeout(async () => {
             ageOverlay.classList.add('hidden');
             ageOverlay.classList.remove('fade-out');
-            
+
             // Automatically initialize guest user and show app
             await initializeGuestUser();
             appContainer.classList.remove('hidden');
@@ -328,7 +328,7 @@ document.addEventListener("DOMContentLoaded", function () {
             // 5. Update UI profile picture instantly
             alert("Profile picture saved successfully!");
             cropModal.classList.add('hidden');
-            
+
             // Cleanup
             if (cropper) {
                 cropper.destroy();
@@ -464,11 +464,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
         try {
             isSendingMessage = true;
-            sendBtn.disabled = true; 
+            sendBtn.disabled = true;
 
             // Generate Unique Message ID
             const msgId = Date.now() + "-" + Math.random().toString(36).substr(2, 9);
-            
+
             console.log("Message Sent:", msgId);
 
             await db.ref('messages/' + currentChatId).push({
@@ -509,12 +509,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
     async function displayMessage(msg) {
         if (!msg.messageId) return; // Ignore legacy messages without IDs
-        
+
         if (displayedMessageIds.has(msg.messageId)) {
             console.log("Duplicate Prevented:", msg.messageId);
             return;
         }
-        
+
         displayedMessageIds.add(msg.messageId);
 
         const isMe = msg.senderId === numericId;
@@ -580,7 +580,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         db.ref('activeChats').off('child_added');
         db.ref('waitingUsers').off('child_added');
-        
+
         currentChatId = null;
         partnerId = null;
         partnerProfile = null;
