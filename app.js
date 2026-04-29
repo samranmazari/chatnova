@@ -131,6 +131,8 @@ document.addEventListener("DOMContentLoaded", function () {
                     displayName: "Guest" + numericId,
                     profileImageURL: "",
                     authProvider: "guest",
+                    gender: "",
+                    isPremium: false,
                     createdAt: firebase.database.ServerValue.TIMESTAMP
                 };
 
@@ -249,8 +251,59 @@ document.addEventListener("DOMContentLoaded", function () {
             }
             document.querySelectorAll('.gender-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            setTimeout(() => startMatching(), 400);
+            
+            // Transition to Matching Choice
+            setTimeout(() => {
+                showScreen('screen-matching-choice');
+            }, 400);
         });
+    });
+
+    // Matching Choice Buttons
+    document.querySelectorAll('.match-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const preference = btn.getAttribute('data-preference');
+            
+            if (btn.classList.contains('locked') && (!userProfile || !userProfile.isPremium)) {
+                // Show Premium Modal
+                document.getElementById('premium-modal').classList.remove('hidden');
+                return;
+            }
+
+            // Start Matching with Preference
+            startMatching(preference);
+        });
+    });
+
+    // Premium Modal Actions
+    document.getElementById('premium-cancel').addEventListener('click', () => {
+        document.getElementById('premium-modal').classList.add('hidden');
+    });
+
+    document.getElementById('upgrade-now-btn').addEventListener('click', async () => {
+        // Mock Upgrade Process
+        if (!numericId) return;
+        
+        try {
+            document.getElementById('upgrade-now-btn').innerText = "UPGRADING...";
+            await db.ref('users/' + numericId).update({ isPremium: true });
+            
+            if (userProfile) userProfile.isPremium = true;
+            
+            // Update UI
+            document.querySelectorAll('.match-btn.premium').forEach(btn => {
+                btn.classList.remove('locked');
+                const lock = btn.querySelector('.lock-badge');
+                if (lock) lock.remove();
+            });
+
+            alert("Success! You are now a Premium user.");
+            document.getElementById('premium-modal').classList.add('hidden');
+        } catch (e) {
+            alert("Upgrade failed. Please try again.");
+        } finally {
+            document.getElementById('upgrade-now-btn').innerText = "UPGRADE NOW";
+        }
     });
 
 
@@ -407,23 +460,24 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // --- MATCHING SYSTEM ---
 
-    function startMatching() {
+    function startMatching(preference = 'random') {
         if (isSearching) return;
         if (!db || !numericId) return;
 
-        console.log("ChatNova: Searching... ID:", numericId);
+        console.log("ChatNova: Searching... Preference:", preference);
         isSearching = true;
         showScreen('screen-searching');
 
         const waitingRef = db.ref('waitingUsers/' + numericId);
         waitingRef.set({
             gender: userProfile.gender,
+            preference: preference,
             timestamp: firebase.database.ServerValue.TIMESTAMP
         });
 
         waitingRef.onDisconnect().remove();
 
-        // Clear and re-attach listeners
+        // Listener for active chats (if someone else matches with us)
         db.ref('activeChats').off('child_added');
         db.ref('activeChats').on('child_added', async (snapshot) => {
             const chat = snapshot.val();
@@ -432,17 +486,31 @@ document.addEventListener("DOMContentLoaded", function () {
                 await joinChat(snapshot.key, pId);
             }
         });
-        console.log("Listener Attached: activeChats");
 
+        // Listener for other waiting users (to find a match ourselves)
         db.ref('waitingUsers').off('child_added');
         db.ref('waitingUsers').on('child_added', (snapshot) => {
             if (!isSearching) return;
             const pId = snapshot.key;
-            if (pId !== numericId && numericId < pId) {
+            if (pId === numericId) return;
+
+            const potentialPartner = snapshot.val();
+            
+            // PREFERENCE MATCHING LOGIC
+            let isCompatible = false;
+
+            // My compatibility check
+            if (preference === 'random' || potentialPartner.gender === preference) {
+                // Their compatibility check
+                if (potentialPartner.preference === 'random' || potentialPartner.preference === userProfile.gender) {
+                    isCompatible = true;
+                }
+            }
+
+            if (isCompatible && numericId < pId) {
                 tryMatch(pId);
             }
         });
-        console.log("Listener Attached: waitingUsers");
     }
 
     function tryMatch(targetPartnerId) {

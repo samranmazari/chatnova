@@ -168,18 +168,133 @@ body.app-active {
 }
 
 /* App Header */
-.app-header {
-    height: 80px;
+/* Matching Choice Screen */
+.matching-options {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+.match-btn {
+    width: 100%;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 1.25rem;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0 2rem;
-    background: rgba(17, 17, 17, 0.8);
-    backdrop-filter: blur(20px);
-    border-bottom: 1px solid var(--glass-border);
-    position: sticky;
-    top: 0;
-    z-index: 50;
+    gap: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+    color: var(--text-main);
+    text-align: left;
+}
+
+.match-btn:hover:not(.locked) {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateX(5px);
+    border-color: var(--primary-color);
+}
+
+.match-icon {
+    width: 50px;
+    height: 50px;
+    background: rgba(168, 85, 247, 0.1);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary-color);
+    flex-shrink: 0;
+}
+
+.match-btn.free .match-icon {
+    background: rgba(59, 130, 246, 0.1);
+    color: var(--accent-color);
+}
+
+.match-text h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.match-text span {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.match-btn.premium.locked {
+    opacity: 0.7;
+    filter: grayscale(0.5);
+}
+
+.match-btn.premium.locked:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.lock-badge {
+    position: absolute;
+    right: 1.5rem;
+    width: 32px;
+    height: 32px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    backdrop-filter: blur(5px);
+}
+
+/* Premium Modal Specifics */
+.premium-upgrade-modal {
+    max-width: 480px;
+}
+
+.premium-icon {
+    background: var(--primary-gradient) !important;
+    color: #fff !important;
+    animation: crownPulse 2s infinite;
+}
+
+@keyframes crownPulse {
+    0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.4); }
+    70% { box-shadow: 0 0 0 20px rgba(168, 85, 247, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
+}
+
+.premium-features-list {
+    margin: 1.5rem 0 2.5rem;
+    text-align: left;
+    display: grid;
+    gap: 1rem;
+}
+
+.feature-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.feature-item i {
+    color: var(--success-color);
+    width: 18px;
+    height: 18px;
+}
+
+.modal-actions.vertical {
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.btn-full {
+    width: 100%;
 }
 
 .nav-container {
