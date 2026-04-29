@@ -14,11 +14,13 @@ console.log("ChatNova: app.js loading...");
 document.addEventListener("DOMContentLoaded", function () {
     console.log("ChatNova: DOM fully loaded");
 
+    // Cloudinary Config (Unsigned Upload)
+    const CLOUDINARY_CLOUD_NAME = "PASTE_YOUR_CLOUD_NAME_HERE"; 
+    const CLOUDINARY_UPLOAD_PRESET = "PASTE_YOUR_UNSIGNED_PRESET_HERE";
+
     // Initialize Firebase
     let db = null;
     let auth = null;
-    const IMGBB_API_KEY = "f798e1694f4b16256c71f92e7616616a"; // I'll provide a temporary one or placeholder
-    
     try {
         if (typeof firebase !== 'undefined') {
             if (!firebase.apps.length) {
@@ -260,6 +262,27 @@ document.addEventListener("DOMContentLoaded", function () {
         avatarInput.value = '';
     });
 
+    async function uploadToCloudinary(blob) {
+        console.log("UPLOAD STARTED");
+        const formData = new FormData();
+        formData.append('file', blob);
+        formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+        const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error ? errData.error.message : "Cloudinary upload failed");
+        }
+
+        const data = await response.json();
+        console.log("UPLOAD FINISHED");
+        return data.secure_url;
+    }
+
     async function updateProfilePicture() {
         console.log("START UPLOAD");
         if (!cropper || !numericId) {
@@ -279,36 +302,20 @@ document.addEventListener("DOMContentLoaded", function () {
             });
             if (!canvas) throw new Error("Canvas generation failed");
 
-            // 2. Convert canvas to Blob (MANDATORY)
+            // 2. Convert canvas to Blob
             const blob = await new Promise((resolve, reject) => {
                 canvas.toBlob((b) => {
                     if (b) {
                         console.log("BLOB CREATED");
                         resolve(b);
                     } else {
-                        reject(new Error("Blob failed"));
+                        reject(new Error("Blob creation failed"));
                     }
                 }, 'image/jpeg', 0.85);
             });
 
-            // 3. Upload to Free API (imgbb)
-            console.log("UPLOAD STARTED");
-            const formData = new FormData();
-            formData.append('image', blob);
-
-            const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
-                method: 'POST',
-                body: formData
-            });
-
-            const result = await response.json();
-            
-            if (!result.success) {
-                throw new Error(result.error ? result.error.message : "Upload to imgbb failed");
-            }
-
-            const imageUrl = result.data.url;
-            console.log("UPLOAD FINISHED");
+            // 3. Upload to Cloudinary
+            const imageUrl = await uploadToCloudinary(blob);
             console.log("URL RECEIVED");
 
             // 4. Save URL to Firebase Database
@@ -331,8 +338,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
         } catch (error) {
             console.error("ChatNova: DP Upload Error", error);
-            alert("Upload failed, try again: " + error.message);
+            alert("Upload failed: " + error.message);
         } finally {
+            console.log("FORCING LOADING STOP");
             uploadStatus.classList.add('hidden');
             cropSave.disabled = false;
         }
