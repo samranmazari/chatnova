@@ -890,3 +890,87 @@ crop-container-pro {
     line-height: 1.4;
 }
 
+/* Premium Full-Screen Crop Modal */
+.full-screen-modal {
+    z-index: 2000;
+    backdrop-filter: blur(15px);
+    background: rgba(0, 0, 0, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.crop-container-pro {
+    width: 100%;
+    max-width: 600px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem;
+    color: white;
+}
+
+.crop-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 0;
+}
+
+.crop-view-area {
+    flex: 1;
+    width: 100%;
+    margin: 1.5rem 0;
+    background: #111;
+    border-radius: 16px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.crop-view-area img {
+    max-width: 100%;
+    display: block;
+}
+
+.crop-footer {
+    padding-bottom: 2rem;
+}
+
+.crop-actions-row {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.btn-square {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    padding: 0;
+}
+
+.status-msg-pro {
+    text-align: center;
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+    font-weight: 600;
+    font-size: 0.9rem;
+    background: rgba(139, 92, 246, 0.1);
+    padding: 0.5rem;
+    border-radius: 8px;
+}
+
+/* Cropper Circular Overrides */
+.cropper-view-box,
+.cropper-face {
+    border-radius: 50%;
+}
+
+.cropper-line,
+.cropper-point {
+    display: none;
+}
+

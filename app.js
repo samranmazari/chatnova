@@ -39,6 +39,7 @@ document.addEventListener("DOMContentLoaded", function () {
     let isSearching = false;
     let authProvider = "guest";
     let displayedMessageIds = new Set();
+    let cropper = null;
 
     // DOM Elements
     const ageOverlay = document.getElementById('age-overlay');
@@ -56,6 +57,12 @@ document.addEventListener("DOMContentLoaded", function () {
     const profileImgPreview = document.getElementById('profile-img-preview');
     const profileNameInput = document.getElementById('profile-name-input');
     const displayUserId = document.getElementById('display-userid');
+
+    const cropModal = document.getElementById('crop-modal');
+    const cropSave = document.getElementById('crop-save');
+    const cropCancel = document.getElementById('crop-cancel');
+    const imageToCrop = document.getElementById('image-to-crop');
+    const uploadStatus = document.getElementById('upload-status');
 
     const messagesContainer = document.getElementById('messages-container');
     const chatInput = document.getElementById('chat-input');
@@ -91,7 +98,7 @@ document.addEventListener("DOMContentLoaded", function () {
             const snapshot = await db.ref('users/' + numericId).once('value');
             if (snapshot.exists()) {
                 userProfile = snapshot.val();
-                loadProfileToUI();
+                attachProfileListener();
                 return;
             }
         }
@@ -116,7 +123,20 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 await db.ref('users/' + numericId).set(userProfile);
                 console.log("ChatNova: Guest profile created for ID", numericId);
+                attachProfileListener();
+            }
+        });
+    }
+
+    function attachProfileListener() {
+        if (!numericId || !db) return;
+        
+        db.ref('users/' + numericId).on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                userProfile = data;
                 loadProfileToUI();
+                console.log("ChatNova: Profile synced in real-time");
             }
         });
     }
@@ -127,6 +147,11 @@ document.addEventListener("DOMContentLoaded", function () {
         profileNameInput.value = userProfile.displayName;
         if (userProfile.profileImageURL) {
             profileImgPreview.src = userProfile.profileImageURL;
+            
+            // Update all my sent message avatars in the current chat
+            document.querySelectorAll('.message-wrapper.sent .msg-avatar').forEach(img => {
+                img.src = userProfile.profileImageURL;
+            });
         }
     }
 
@@ -184,25 +209,91 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     });
 
-    avatarInput.addEventListener('change', async (e) => {
+    avatarInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file || !numericId) return;
 
-        const storageRef = storage.ref(`avatars/${numericId}`);
-        const uploadTask = storageRef.put(file);
+        if (!file.type.startsWith('image/')) {
+            alert("Please select a valid image file.");
+            return;
+        }
 
-        uploadTask.on('state_changed',
-            null,
-            (error) => console.error("Upload failed:", error),
-            async () => {
-                const url = await uploadTask.snapshot.ref.getDownloadURL();
-                userProfile.profileImageURL = url;
-                profileImgPreview.src = url;
-                await db.ref('users/' + numericId).update({ profileImageURL: url });
-                console.log("Avatar updated:", url);
-            }
-        );
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            imageToCrop.src = event.target.result;
+            cropModal.classList.remove('hidden');
+
+            if (cropper) cropper.destroy();
+
+            cropper = new Cropper(imageToCrop, {
+                aspectRatio: 1,
+                viewMode: 1,
+                guides: false,
+                autoCropArea: 1,
+                dragMode: 'move',
+                cropBoxMovable: false,
+                cropBoxResizable: false,
+                toggleDragModeOnDblclick: false,
+            });
+        };
+        reader.readAsDataURL(file);
     });
+
+    cropCancel.addEventListener('click', () => {
+        cropModal.classList.add('hidden');
+        if (cropper) {
+            cropper.destroy();
+            cropper = null;
+        }
+        avatarInput.value = '';
+    });
+
+    cropSave.addEventListener('click', () => {
+        if (!cropper || !numericId) return;
+
+        uploadStatus.classList.remove('hidden');
+        cropSave.disabled = true;
+
+        const canvas = cropper.getCroppedCanvas({
+            width: 300,
+            height: 300
+        });
+
+        canvas.toBlob((blob) => {
+            const storageRef = storage.ref(`avatars/${numericId}.jpg`);
+            const uploadTask = storageRef.put(blob, { contentType: 'image/jpeg' });
+
+            uploadTask.on('state_changed',
+                null,
+                (error) => {
+                    console.error("Upload failed:", error);
+                    alert("Upload failed. Please try again.");
+                    uploadStatus.classList.add('hidden');
+                    cropSave.disabled = false;
+                },
+                async () => {
+                    const url = await uploadTask.snapshot.ref.getDownloadURL();
+                    await db.ref('users/' + numericId).update({ profileImageURL: url });
+                    
+                    console.log("Avatar saved successfully:", url);
+                    
+                    // Cleanup
+                    uploadStatus.classList.add('hidden');
+                    cropSave.disabled = false;
+                    cropModal.classList.add('hidden');
+                    cropper.destroy();
+                    cropper = null;
+                    avatarInput.value = '';
+                }
+            );
+        }, 'image/jpeg', 0.85); // High quality JPEG compression
+    });
+
+    // Cropper Controls
+    document.getElementById('rotate-left').addEventListener('click', () => cropper && cropper.rotate(-90));
+    document.getElementById('rotate-right').addEventListener('click', () => cropper && cropper.rotate(90));
+    document.getElementById('zoom-in').addEventListener('click', () => cropper && cropper.zoom(0.1));
+    document.getElementById('zoom-out').addEventListener('click', () => cropper && cropper.zoom(-0.1));
 
     // --- MATCHING SYSTEM ---
 
