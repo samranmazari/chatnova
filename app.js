@@ -232,6 +232,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // --- EVENT LISTENERS ---
 
     document.getElementById('age-yes').addEventListener('click', async () => {
+        console.log("ChatNova: Text Chat clicked (Age Verified)");
         ageOverlay.classList.add('fade-out');
         setTimeout(async () => {
             ageOverlay.classList.add('hidden');
@@ -246,14 +247,8 @@ document.addEventListener("DOMContentLoaded", function () {
             await initializeGuestUser();
             appContainer.classList.remove('hidden');
 
-            // --- INSTANT FLOW ---
-            // If user already has a gender set from a previous session, go straight to searching!
-            if (userProfile && userProfile.gender) {
-                console.log("ChatNova: Existing user detected, starting match immediately");
-                startMatching('random');
-            } else {
-                showScreen('screen-gender');
-            }
+            // ALWAYS ask for gender at the start of a session
+            showScreen('screen-gender');
         }, 500);
     });
 
@@ -264,19 +259,20 @@ document.addEventListener("DOMContentLoaded", function () {
 
     document.querySelectorAll('.gender-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
-            console.log("ChatNova: Gender selected");
             const gender = btn.getAttribute('data-gender');
+            console.log("ChatNova: Gender selected:", gender);
+            
             if (userProfile) {
                 userProfile.gender = gender;
                 await db.ref('users/' + numericId).update({ gender: gender });
             }
+            
             document.querySelectorAll('.gender-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
-            // Transition to Matching Choice
-            setTimeout(() => {
-                showScreen('screen-matching-choice');
-            }, 400);
+            // AFTER selecting gender, go straight to searching
+            console.log("ChatNova: Starting search");
+            startMatching('random');
         });
     });
 
