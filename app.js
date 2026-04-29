@@ -14,8 +14,7 @@ console.log("ChatNova: app.js loading...");
 document.addEventListener("DOMContentLoaded", function () {
     console.log("ChatNova: DOM fully loaded");
 
-    // Cloudinary Config (Unsigned Upload)
-    const CLOUDINARY_CLOUD_NAME = "abcxyz123";
+    const CLOUDINARY_CLOUD_NAME = "dtb2bas38";
     const CLOUDINARY_UPLOAD_PRESET = "chatnova_dp";
 
     // Initialize Firebase
