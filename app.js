@@ -16,7 +16,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Cloudinary Config (Unsigned Upload)
     const CLOUDINARY_CLOUD_NAME = "abcxyz123";
-    const CLOUDINARY_UPLOAD_PRESET = "chatnova_dp";
+    const CLOUDINARY_UPLOAD_PRESET = "chatnovadp";
 
     // Initialize Firebase
     let db = null;
