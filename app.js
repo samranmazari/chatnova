@@ -40,6 +40,7 @@ document.addEventListener("DOMContentLoaded", function () {
     let partnerProfile = null;
     let isSearching = false;
     let authProvider = null;
+    let displayedMessageIds = new Set();
 
     // DOM Elements
     const ageOverlay = document.getElementById('age-overlay');
@@ -290,6 +291,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
         waitingRef.onDisconnect().remove();
 
+        // Clear and re-attach listeners
+        db.ref('activeChats').off('child_added');
         db.ref('activeChats').on('child_added', async (snapshot) => {
             const chat = snapshot.val();
             if (chat.u1 === numericId || chat.u2 === numericId) {
@@ -297,7 +300,9 @@ document.addEventListener("DOMContentLoaded", function () {
                 await joinChat(snapshot.key, pId);
             }
         });
+        console.log("Listener Attached: activeChats");
 
+        db.ref('waitingUsers').off('child_added');
         db.ref('waitingUsers').on('child_added', (snapshot) => {
             if (!isSearching) return;
             const pId = snapshot.key;
@@ -305,6 +310,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 tryMatch(pId);
             }
         });
+        console.log("Listener Attached: waitingUsers");
     }
 
     function tryMatch(targetPartnerId) {
@@ -328,6 +334,9 @@ document.addEventListener("DOMContentLoaded", function () {
     async function joinChat(chatId, pId) {
         if (currentChatId) return;
 
+        // Reset message tracking for new chat
+        displayedMessageIds.clear();
+
         // Fetch partner profile
         const pSnap = await db.ref('users/' + pId).once('value');
         partnerProfile = pSnap.val();
@@ -336,6 +345,7 @@ document.addEventListener("DOMContentLoaded", function () {
         isSearching = false;
 
         db.ref('waitingUsers').off('child_added');
+        db.ref('activeChats').off('child_added');
 
         // UI Transition
         partnerName.innerText = partnerProfile ? partnerProfile.displayName : "Stranger";
@@ -344,15 +354,21 @@ document.addEventListener("DOMContentLoaded", function () {
         showScreen('screen-chat');
         messagesContainer.innerHTML = '<div class="system-msg">Connected! Say hi to ' + (partnerProfile ? partnerProfile.displayName : "Stranger") + '.</div>';
 
-        db.ref('activeChats/' + chatId).onDisconnect().remove();
-        db.ref('activeChats/' + chatId).on('value', (snapshot) => {
+        const chatRef = db.ref('activeChats/' + chatId);
+        chatRef.off('value');
+        chatRef.onDisconnect().remove();
+        chatRef.on('value', (snapshot) => {
             if (!snapshot.exists() && currentChatId) handlePartnerLeft();
         });
+        console.log("Listener Attached: activeChat session");
 
-        db.ref('messages/' + chatId).on('child_added', (snapshot) => {
+        const msgsRef = db.ref('messages/' + chatId);
+        msgsRef.off('child_added');
+        msgsRef.on('child_added', (snapshot) => {
             const msg = snapshot.val();
             displayMessage(msg);
         });
+        console.log("Listener Attached: chat messages");
     }
 
     // --- CHAT SYSTEM ---
@@ -367,22 +383,25 @@ document.addEventListener("DOMContentLoaded", function () {
 
         try {
             isSendingMessage = true;
-            sendBtn.disabled = true; // Visual feedback & locking
+            sendBtn.disabled = true; 
 
-            console.log("ChatNova: Sending message once...");
+            // Generate Unique Message ID
+            const msgId = Date.now() + "-" + Math.random().toString(36).substr(2, 9);
+            
+            console.log("Message Sent:", msgId);
 
             await db.ref('messages/' + currentChatId).push({
+                messageId: msgId,
                 senderId: numericId,
                 text: text,
                 timestamp: firebase.database.ServerValue.TIMESTAMP
             });
 
-            console.log("ChatNova: Message Sent Once");
             chatInput.value = '';
         } catch (error) {
             console.error("ChatNova: Send failed:", error);
         } finally {
-            // Re-enable after a small delay to prevent rapid spamming
+            // Send Button Protection: Disable briefly (300ms)
             setTimeout(() => {
                 isSendingMessage = false;
                 sendBtn.disabled = false;
@@ -408,6 +427,15 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     async function displayMessage(msg) {
+        if (!msg.messageId) return; // Ignore legacy messages without IDs
+        
+        if (displayedMessageIds.has(msg.messageId)) {
+            console.log("Duplicate Prevented:", msg.messageId);
+            return;
+        }
+        
+        displayedMessageIds.add(msg.messageId);
+
         const isMe = msg.senderId === numericId;
         const sender = isMe ? userProfile : partnerProfile;
 
@@ -466,11 +494,17 @@ document.addEventListener("DOMContentLoaded", function () {
             db.ref('messages/' + currentChatId).off();
             db.ref('activeChats/' + currentChatId).remove();
         }
-        db.ref('waitingUsers/' + numericId).remove();
+        if (numericId) {
+            db.ref('waitingUsers/' + numericId).remove();
+        }
+        db.ref('activeChats').off('child_added');
+        db.ref('waitingUsers').off('child_added');
+        
         currentChatId = null;
         partnerId = null;
         partnerProfile = null;
         isSearching = false;
+        displayedMessageIds.clear();
     }
 
     function generateUUID() {
