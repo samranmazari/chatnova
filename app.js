@@ -17,7 +17,6 @@ document.addEventListener("DOMContentLoaded", function () {
     // Initialize Firebase
     let db = null;
     let storage = null;
-    let auth = null;
     try {
         if (typeof firebase !== 'undefined') {
             if (!firebase.apps.length) {
@@ -25,29 +24,24 @@ document.addEventListener("DOMContentLoaded", function () {
             }
             db = firebase.database();
             storage = firebase.storage();
-            auth = firebase.auth();
-            console.log("ChatNova: Firebase, Auth & Storage initialized");
+            console.log("ChatNova: Firebase & Storage initialized");
         }
     } catch (error) {
         console.error("ChatNova: Firebase failed:", error);
     }
 
     // State Variables
-    let numericId = null; // Will be set after auth
+    let numericId = localStorage.getItem('chatnova_userId'); 
     let userProfile = null;
     let currentChatId = null;
     let partnerId = null;
     let partnerProfile = null;
     let isSearching = false;
-    let authProvider = null;
+    let authProvider = "guest";
     let displayedMessageIds = new Set();
 
     // DOM Elements
     const ageOverlay = document.getElementById('age-overlay');
-    const authOverlay = document.getElementById('auth-overlay');
-    const authError = document.getElementById('auth-error');
-    const googleLoginBtn = document.getElementById('google-login-btn');
-    const guestLoginBtn = document.getElementById('guest-login-btn');
     const blockedScreen = document.getElementById('blocked-screen');
     const appContainer = document.getElementById('app-container');
     const screenGender = document.getElementById('screen-gender');
@@ -89,105 +83,42 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    function showAuthError(msg) {
-        authError.innerText = msg;
-        authError.classList.remove('hidden');
-        setTimeout(() => authError.classList.add('hidden'), 5000);
-    }
+    // --- USER PROFILE SYSTEM ---
 
-    // --- AUTHENTICATION SYSTEM ---
-
-    auth.onAuthStateChanged(async (user) => {
-        if (user) {
-            console.log("ChatNova: User authenticated", user.uid);
-            numericId = user.uid;
-            authProvider = "google";
-            
-            // Check if profile exists
+    async function initializeGuestUser() {
+        if (numericId) {
+            // Fetch existing profile
             const snapshot = await db.ref('users/' + numericId).once('value');
             if (snapshot.exists()) {
                 userProfile = snapshot.val();
-                completeAuthFlow();
-            } else {
-                // Create new Google profile
+                loadProfileToUI();
+                return;
+            }
+        }
+
+        // Generate New Sequential ID
+        console.log("ChatNova: Generating new sequential ID...");
+        db.ref('userCounter').transaction((current) => {
+            return (current || 1000) + 1;
+        }, async (error, committed, snapshot) => {
+            if (committed) {
+                numericId = snapshot.val().toString();
+                localStorage.setItem('chatnova_userId', numericId);
+
+                // Create Profile
                 userProfile = {
                     userId: numericId,
-                    displayName: user.displayName || "User" + numericId.substring(0, 4),
-                    email: user.email || "",
-                    profileImageURL: user.photoURL || "",
-                    authProvider: "google",
+                    displayName: "Guest" + numericId,
+                    profileImageURL: "",
+                    authProvider: "guest",
                     createdAt: firebase.database.ServerValue.TIMESTAMP
                 };
+
                 await db.ref('users/' + numericId).set(userProfile);
-                completeAuthFlow();
+                console.log("ChatNova: Guest profile created for ID", numericId);
+                loadProfileToUI();
             }
-        } else {
-            console.log("ChatNova: No active session");
-            // Check for guest session in local storage if any (optional, but prompt says stay on login screen)
-            const savedGuestId = localStorage.getItem('chatnova_guestId');
-            if (savedGuestId) {
-                const snapshot = await db.ref('users/' + savedGuestId).once('value');
-                if (snapshot.exists()) {
-                    numericId = savedGuestId;
-                    userProfile = snapshot.val();
-                    authProvider = "guest";
-                    completeAuthFlow();
-                    return;
-                }
-            }
-            // Show auth screen if not on blocked screen
-            if (blockedScreen.classList.contains('hidden')) {
-                authOverlay.classList.remove('hidden');
-            }
-        }
-    });
-
-    async function handleGoogleLogin() {
-        const provider = new firebase.auth.GoogleAuthProvider();
-        try {
-            googleLoginBtn.disabled = true;
-            await auth.signInWithPopup(provider);
-        } catch (error) {
-            console.error("ChatNova: Google Login Failed", error);
-            showAuthError("Google Sign-In failed. Please try again.");
-            googleLoginBtn.disabled = false;
-        }
-    }
-
-    async function handleGuestLogin() {
-        try {
-            guestLoginBtn.disabled = true;
-            const guestId = Math.floor(100000 + Math.random() * 900000).toString();
-            numericId = guestId;
-            authProvider = "guest";
-            
-            userProfile = {
-                userId: guestId,
-                displayName: "Guest" + guestId,
-                profileImageURL: "",
-                authProvider: "guest",
-                createdAt: firebase.database.ServerValue.TIMESTAMP
-            };
-
-            await db.ref('users/' + guestId).set(userProfile);
-            localStorage.setItem('chatnova_guestId', guestId);
-            completeAuthFlow();
-        } catch (error) {
-            console.error("ChatNova: Guest Login Failed", error);
-            showAuthError("Guest Login failed. Please try again.");
-            guestLoginBtn.disabled = false;
-        }
-    }
-
-    function completeAuthFlow() {
-        authOverlay.classList.add('fade-out');
-        setTimeout(() => {
-            authOverlay.classList.add('hidden');
-            authOverlay.classList.remove('fade-out');
-            appContainer.classList.remove('hidden');
-            loadProfileToUI();
-            showScreen('screen-gender');
-        }, 500);
+        });
     }
 
     function loadProfileToUI() {
@@ -201,14 +132,16 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // --- EVENT LISTENERS ---
 
-    document.getElementById('age-yes').addEventListener('click', () => {
+    document.getElementById('age-yes').addEventListener('click', async () => {
         ageOverlay.classList.add('fade-out');
-        setTimeout(() => {
+        setTimeout(async () => {
             ageOverlay.classList.add('hidden');
             ageOverlay.classList.remove('fade-out');
             
-            // Instead of showing app, show auth screen
-            authOverlay.classList.remove('hidden');
+            // Automatically initialize guest user and show app
+            await initializeGuestUser();
+            appContainer.classList.remove('hidden');
+            showScreen('screen-gender');
         }, 500);
     });
 
@@ -230,8 +163,6 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
-    googleLoginBtn.addEventListener('click', handleGoogleLogin);
-    guestLoginBtn.addEventListener('click', handleGuestLogin);
 
     profileBtn.addEventListener('click', () => {
         showScreen('screen-profile');
@@ -507,10 +438,15 @@ document.addEventListener("DOMContentLoaded", function () {
         displayedMessageIds.clear();
     }
 
-    function generateUUID() {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
+    // Automatic Session Check
+    if (numericId) {
+        console.log("ChatNova: Existing session found, initializing...");
+        initializeGuestUser().then(() => {
+            // Optional: Auto-skip age check if desired, but let's stay safe
+            // If you want to skip age check for returning users, uncomment below:
+            // ageOverlay.classList.add('hidden');
+            // appContainer.classList.remove('hidden');
+            // showScreen('screen-gender');
         });
     }
 });
