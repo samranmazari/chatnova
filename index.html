@@ -28,6 +28,32 @@
         </div>
     </div>
 
+    <!-- Authentication Screen -->
+    <div id="auth-overlay" class="overlay hidden">
+        <div class="modal auth-modal">
+            <div class="modal-icon"><i data-lucide="lock"></i></div>
+            <h1>Join ChatNova</h1>
+            <p>Connect instantly with people around the world. Choose your way to start.</p>
+            
+            <div id="auth-error" class="error-msg hidden"></div>
+
+            <div class="auth-options">
+                <button id="google-login-btn" class="btn btn-google">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+                    <span>Continue with Google</span>
+                </button>
+                <div class="divider"><span>OR</span></div>
+                <button id="guest-login-btn" class="btn btn-secondary btn-large">
+                    <i data-lucide="user-plus"></i>
+                    <span>Continue as Guest</span>
+                </button>
+            </div>
+            <div class="auth-footer">
+                By continuing, you agree to our Terms of Service.
+            </div>
+        </div>
+    </div>
+
     <!-- Main Container -->
     <main id="app-container" class="hidden">
 
@@ -160,6 +186,7 @@
 
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-storage-compat.js"></script>
 

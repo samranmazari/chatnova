@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // Initialize Firebase
     let db = null;
     let storage = null;
+    let auth = null;
     try {
         if (typeof firebase !== 'undefined') {
             if (!firebase.apps.length) {
@@ -24,22 +25,28 @@ document.addEventListener("DOMContentLoaded", function () {
             }
             db = firebase.database();
             storage = firebase.storage();
-            console.log("ChatNova: Firebase & Storage initialized");
+            auth = firebase.auth();
+            console.log("ChatNova: Firebase, Auth & Storage initialized");
         }
     } catch (error) {
         console.error("ChatNova: Firebase failed:", error);
     }
 
     // State Variables
-    let numericId = localStorage.getItem('chatnova_numericId');
+    let numericId = null; // Will be set after auth
     let userProfile = null;
     let currentChatId = null;
     let partnerId = null;
     let partnerProfile = null;
     let isSearching = false;
+    let authProvider = null;
 
     // DOM Elements
     const ageOverlay = document.getElementById('age-overlay');
+    const authOverlay = document.getElementById('auth-overlay');
+    const authError = document.getElementById('auth-error');
+    const googleLoginBtn = document.getElementById('google-login-btn');
+    const guestLoginBtn = document.getElementById('guest-login-btn');
     const blockedScreen = document.getElementById('blocked-screen');
     const appContainer = document.getElementById('app-container');
     const screenGender = document.getElementById('screen-gender');
@@ -81,40 +88,105 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // --- USER PROFILE SYSTEM ---
+    function showAuthError(msg) {
+        authError.innerText = msg;
+        authError.classList.remove('hidden');
+        setTimeout(() => authError.classList.add('hidden'), 5000);
+    }
 
-    async function initUser(gender) {
-        if (numericId) {
-            // Fetch existing profile
+    // --- AUTHENTICATION SYSTEM ---
+
+    auth.onAuthStateChanged(async (user) => {
+        if (user) {
+            console.log("ChatNova: User authenticated", user.uid);
+            numericId = user.uid;
+            authProvider = "google";
+            
+            // Check if profile exists
             const snapshot = await db.ref('users/' + numericId).once('value');
-            userProfile = snapshot.val();
-            loadProfileToUI();
-            return;
-        }
-
-        // Generate New Sequential ID
-        console.log("ChatNova: Generating new sequential ID...");
-        db.ref('userCounter').transaction((current) => {
-            return (current || 1000) + 1;
-        }, async (error, committed, snapshot) => {
-            if (committed) {
-                numericId = snapshot.val().toString();
-                localStorage.setItem('chatnova_numericId', numericId);
-
-                // Create Profile
+            if (snapshot.exists()) {
+                userProfile = snapshot.val();
+                completeAuthFlow();
+            } else {
+                // Create new Google profile
                 userProfile = {
                     userId: numericId,
-                    displayName: "User" + numericId,
-                    gender: gender,
-                    profileImageURL: "",
+                    displayName: user.displayName || "User" + numericId.substring(0, 4),
+                    email: user.email || "",
+                    profileImageURL: user.photoURL || "",
+                    authProvider: "google",
                     createdAt: firebase.database.ServerValue.TIMESTAMP
                 };
-
                 await db.ref('users/' + numericId).set(userProfile);
-                console.log("ChatNova: Profile created for ID", numericId);
-                loadProfileToUI();
+                completeAuthFlow();
             }
-        });
+        } else {
+            console.log("ChatNova: No active session");
+            // Check for guest session in local storage if any (optional, but prompt says stay on login screen)
+            const savedGuestId = localStorage.getItem('chatnova_guestId');
+            if (savedGuestId) {
+                const snapshot = await db.ref('users/' + savedGuestId).once('value');
+                if (snapshot.exists()) {
+                    numericId = savedGuestId;
+                    userProfile = snapshot.val();
+                    authProvider = "guest";
+                    completeAuthFlow();
+                    return;
+                }
+            }
+            // Show auth screen if not on blocked screen
+            if (blockedScreen.classList.contains('hidden')) {
+                authOverlay.classList.remove('hidden');
+            }
+        }
+    });
+
+    async function handleGoogleLogin() {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        try {
+            googleLoginBtn.disabled = true;
+            await auth.signInWithPopup(provider);
+        } catch (error) {
+            console.error("ChatNova: Google Login Failed", error);
+            showAuthError("Google Sign-In failed. Please try again.");
+            googleLoginBtn.disabled = false;
+        }
+    }
+
+    async function handleGuestLogin() {
+        try {
+            guestLoginBtn.disabled = true;
+            const guestId = Math.floor(100000 + Math.random() * 900000).toString();
+            numericId = guestId;
+            authProvider = "guest";
+            
+            userProfile = {
+                userId: guestId,
+                displayName: "Guest" + guestId,
+                profileImageURL: "",
+                authProvider: "guest",
+                createdAt: firebase.database.ServerValue.TIMESTAMP
+            };
+
+            await db.ref('users/' + guestId).set(userProfile);
+            localStorage.setItem('chatnova_guestId', guestId);
+            completeAuthFlow();
+        } catch (error) {
+            console.error("ChatNova: Guest Login Failed", error);
+            showAuthError("Guest Login failed. Please try again.");
+            guestLoginBtn.disabled = false;
+        }
+    }
+
+    function completeAuthFlow() {
+        authOverlay.classList.add('fade-out');
+        setTimeout(() => {
+            authOverlay.classList.add('hidden');
+            authOverlay.classList.remove('fade-out');
+            appContainer.classList.remove('hidden');
+            loadProfileToUI();
+            showScreen('screen-gender');
+        }, 500);
     }
 
     function loadProfileToUI() {
@@ -132,8 +204,10 @@ document.addEventListener("DOMContentLoaded", function () {
         ageOverlay.classList.add('fade-out');
         setTimeout(() => {
             ageOverlay.classList.add('hidden');
-            appContainer.classList.remove('hidden');
-            showScreen('screen-gender');
+            ageOverlay.classList.remove('fade-out');
+            
+            // Instead of showing app, show auth screen
+            authOverlay.classList.remove('hidden');
         }, 500);
     });
 
@@ -145,12 +219,18 @@ document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll('.gender-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const gender = btn.getAttribute('data-gender');
-            await initUser(gender);
+            if (userProfile) {
+                userProfile.gender = gender;
+                await db.ref('users/' + numericId).update({ gender: gender });
+            }
             document.querySelectorAll('.gender-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             setTimeout(() => startMatching(), 400);
         });
     });
+
+    googleLoginBtn.addEventListener('click', handleGoogleLogin);
+    guestLoginBtn.addEventListener('click', handleGuestLogin);
 
     profileBtn.addEventListener('click', () => {
         showScreen('screen-profile');
