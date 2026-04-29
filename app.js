@@ -248,11 +248,11 @@ document.addEventListener("DOMContentLoaded", function () {
         avatarInput.value = '';
     });
 
-    cropSave.addEventListener('click', async () => {
+    async function updateProfilePicture() {
         if (!cropper || !numericId) return;
 
         try {
-            console.log("ChatNova: Crop process started");
+            console.log("Canvas ready: Start");
             uploadStatus.classList.remove('hidden');
             cropSave.disabled = true;
 
@@ -261,40 +261,58 @@ document.addEventListener("DOMContentLoaded", function () {
                 width: 300,
                 height: 300
             });
+            if (!canvas) throw new Error("Canvas generation failed");
+            console.log("Canvas ready: Success");
 
-            if (!canvas) throw new Error("Could not create canvas");
-            console.log("ChatNova: Crop complete");
-
-            // 2. Convert to Blob (Promise-based)
+            // 2. Convert to Blob
             const blob = await new Promise((resolve, reject) => {
                 canvas.toBlob((b) => {
-                    if (b) resolve(b);
-                    else reject(new Error("Blob conversion failed"));
-                }, 'image/jpeg', 0.85);
+                    if (b) {
+                        console.log("Blob created: Success");
+                        resolve(b);
+                    } else {
+                        reject(new Error("Blob creation failed"));
+                    }
+                }, 'image/jpeg', 0.90);
             });
 
             // 3. Upload to Firebase Storage
-            console.log("ChatNova: Upload started");
+            console.log("Upload started");
             const storageRef = storage.ref(`avatars/${numericId}.jpg`);
-            const snapshot = await storageRef.put(blob, { contentType: 'image/jpeg' });
-            console.log("ChatNova: Upload success");
+            const uploadTask = storageRef.put(blob, { contentType: 'image/jpeg' });
+
+            // Explicit Promise for Upload Task
+            const snapshot = await new Promise((resolve, reject) => {
+                uploadTask.on('state_changed', 
+                    (snapshot) => {
+                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                        console.log('Upload progress: ' + Math.round(progress) + '%');
+                    }, 
+                    (error) => {
+                        console.error("Upload error:", error);
+                        reject(error);
+                    }, 
+                    () => {
+                        console.log("Upload completed: Success");
+                        resolve(uploadTask.snapshot);
+                    }
+                );
+            });
 
             // 4. Get Download URL
-            const url = await snapshot.ref.getDownloadURL();
-            console.log("ChatNova: URL retrieved:", url);
+            const downloadURL = await snapshot.ref.getDownloadURL();
+            console.log("URL fetched: Success", downloadURL);
 
-            // 5. Save URL to Realtime Database
+            // 5. Update Database
             await db.ref('users/' + numericId).update({ 
-                profileImageURL: url,
+                profileImageURL: downloadURL,
                 lastUpdated: firebase.database.ServerValue.TIMESTAMP 
             });
-            console.log("ChatNova: URL saved to database");
+            console.log("Database updated: Success");
 
-            // 6. Finalize UI
-            alert("Profile picture saved successfully!");
+            // 6. UI Cleanup
+            alert("Profile picture updated successfully!");
             cropModal.classList.add('hidden');
-            
-            // Cleanup
             if (cropper) {
                 cropper.destroy();
                 cropper = null;
@@ -302,14 +320,15 @@ document.addEventListener("DOMContentLoaded", function () {
             avatarInput.value = '';
 
         } catch (error) {
-            console.error("ChatNova: Save process failed:", error);
-            alert("Upload failed: " + error.message);
+            console.error("ChatNova: Update Profile Picture Failed", error);
+            alert("Update Failed: " + error.message);
         } finally {
-            // Always reset loading state
             uploadStatus.classList.add('hidden');
             cropSave.disabled = false;
         }
-    });
+    }
+
+    cropSave.addEventListener('click', updateProfilePicture);
 
     // Cropper Controls
     document.getElementById('rotate-left').addEventListener('click', () => cropper && cropper.rotate(-90));
