@@ -16,17 +16,17 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Initialize Firebase
     let db = null;
-    let storage = null;
     let auth = null;
+    const IMGBB_API_KEY = "f798e1694f4b16256c71f92e7616616a"; // I'll provide a temporary one or placeholder
+    
     try {
         if (typeof firebase !== 'undefined') {
             if (!firebase.apps.length) {
                 firebase.initializeApp(firebaseConfig);
             }
             db = firebase.database();
-            storage = firebase.storage();
             auth = firebase.auth();
-            console.log("ChatNova: Firebase, Auth & Storage initialized");
+            console.log("ChatNova: Firebase & Auth initialized");
         }
     } catch (error) {
         console.error("ChatNova: Firebase failed:", error);
@@ -261,17 +261,18 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     async function updateProfilePicture() {
+        console.log("START UPLOAD");
         if (!cropper || !numericId) {
-            console.error("Missing state");
+            console.error("ChatNova: Missing state");
             return;
         }
 
         try {
-            console.log("STEP 1 OK: Canvas ready");
             uploadStatus.classList.remove('hidden');
             cropSave.disabled = true;
 
             // 1. Get cropped canvas
+            console.log("STEP 1 OK: Canvas ready");
             const canvas = cropper.getCroppedCanvas({
                 width: 300,
                 height: 300
@@ -290,48 +291,38 @@ document.addEventListener("DOMContentLoaded", function () {
                 }, 'image/jpeg', 0.85);
             });
 
-            // 3. Create Storage reference
-            const storageRef = storage.ref(`avatars/${numericId}.jpg`);
-
-            // 4. Upload and WAIT for completion
+            // 3. Upload to Free API (imgbb)
             console.log("UPLOAD STARTED");
-            const uploadTask = storageRef.put(blob, { contentType: 'image/jpeg' });
+            const formData = new FormData();
+            formData.append('image', blob);
 
-            const snapshot = await new Promise((resolve, reject) => {
-                // Safety timeout to prevent infinite loading (30 seconds)
-                const timeout = setTimeout(() => reject(new Error("Upload timed out")), 30000);
-
-                uploadTask.on('state_changed', 
-                    (snap) => {
-                        const progress = (snap.bytesTransferred / snap.totalBytes) * 100;
-                        console.log('Progress: ' + Math.round(progress) + '%');
-                    }, 
-                    (err) => {
-                        clearTimeout(timeout);
-                        reject(err);
-                    }, 
-                    () => {
-                        clearTimeout(timeout);
-                        console.log("UPLOAD FINISHED");
-                        resolve(uploadTask.snapshot);
-                    }
-                );
+            const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+                method: 'POST',
+                body: formData
             });
 
-            // 5. Get download URL
-            const url = await snapshot.ref.getDownloadURL();
+            const result = await response.json();
+            
+            if (!result.success) {
+                throw new Error(result.error ? result.error.message : "Upload to imgbb failed");
+            }
+
+            const imageUrl = result.data.url;
+            console.log("UPLOAD FINISHED");
             console.log("URL RECEIVED");
 
-            // 6. Save URL to Database
-            await db.ref('users/' + numericId).update({ 
-                profileImageURL: url,
-                lastUpdated: firebase.database.ServerValue.TIMESTAMP 
+            // 4. Save URL to Firebase Database
+            await db.ref('users/' + numericId).update({
+                profileImageURL: imageUrl,
+                lastUpdated: firebase.database.ServerValue.TIMESTAMP
             });
             console.log("DATABASE UPDATED");
 
-            // 7. Update UI
+            // 5. Update UI profile picture instantly
             alert("Profile picture saved successfully!");
             cropModal.classList.add('hidden');
+            
+            // Cleanup
             if (cropper) {
                 cropper.destroy();
                 cropper = null;
@@ -339,10 +330,9 @@ document.addEventListener("DOMContentLoaded", function () {
             avatarInput.value = '';
 
         } catch (error) {
-            console.error("ChatNova Root Error:", error);
-            alert("Save failed: " + error.message);
+            console.error("ChatNova: DP Upload Error", error);
+            alert("Upload failed, try again: " + error.message);
         } finally {
-            console.log("FORCING LOADING STOP");
             uploadStatus.classList.add('hidden');
             cropSave.disabled = false;
         }
